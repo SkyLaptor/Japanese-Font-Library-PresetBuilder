@@ -1,0 +1,2 @@
+# Japanese-Font-Library-PresetBuilder
+スカイリム用のfontconfig.txtとフォントのキット生成するアプリケーション
