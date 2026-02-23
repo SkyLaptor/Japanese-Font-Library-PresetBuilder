@@ -14,14 +14,23 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
     interface_out = out_dir / Path(INTERFACE_DIR)
     interface_out.mkdir(parents=True, exist_ok=True)
 
+    # --- 2. 必要なSWFをキャッシュから特定 (ここを先にやる) ---
+    used_fonts = {m["font_name"] for m in preset.mappings if m["font_name"]}
+    needed_swfs = set()
+
+    for entry in cache_data:
+        swf_rel_path = entry.get("swf_path", "")
+        font_names = entry.get("font_names", [])
+        if any(f in used_fonts for f in font_names):
+            # fontconfig.txt に書くパス（Interface/ファイル名）を作成
+            needed_swfs.add(f"{str(INTERFACE_DIR)}/{Path(swf_rel_path).name}")
+
     # fontconfig.txtの内容
     lines = []
 
-    # 1. FontLib セクション
-    # 動的に必要なSWFを追加
-    required_swfs = preset.get_required_swfs()
-    for swf in required_swfs:
-        lines.append(f"fontlib \"{swf}\"")
+    # 1. FontLib セクション (特定した needed_swfs を使う)
+    for swf_path in sorted(list(needed_swfs)):
+        lines.append(f"fontlib \"{swf_path}\"")
 
     # 2. Map セクション
     for m in preset.mappings:
