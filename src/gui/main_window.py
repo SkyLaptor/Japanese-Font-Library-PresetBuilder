@@ -380,7 +380,7 @@ class MainWindow(QMainWindow):
             self.refresh_fonts(p)
             self.user_config.save()
 
-    def refresh_fonts(self, folder_path: Path):
+    def refresh_fonts(self, swf_dir_path: Path):
         # 1. 環境チェック
         if not self.check_environment():
             return
@@ -409,21 +409,27 @@ class MainWindow(QMainWindow):
             cache_updated = False
 
             # スキャン実行
-            for swf in folder_path.glob("*.swf"):
+            for swf_path in swf_dir_path.rglob("*.swf"):
                 # swf_parser実行
-                fonts = swf_parser(
-                    swf, settings=self.settings, cache=current_cache, debug=False
+                font_names = swf_parser(
+                    swf_path=swf_path,
+                    settings=self.settings,
+                    cache=current_cache,
+                    debug=False,
                 )
-                # --- キャッシュクラスを更新して即保存
-                self.cache.update_swf_cache(swf, fonts, swf_dir=folder_path)
-                self.cache.save()  # これで cache.yml だけが更新される！
+                # 都度キャッシュ保存（途中で落ちても良いように）
+                self.cache.update_swf_cache(
+                    swf_path=swf_path, font_names=font_names, swf_dir=swf_dir_path
+                )
+                self.cache.save()
                 cache_updated = True
-                for f in fonts:
+                for f in font_names:
                     if f not in detected:
                         detected.append(f)
 
-            if cache_updated:
-                self.user_config.save()
+            # TODO: これいる？
+            # if cache_updated:
+            #     self.user_config.save()
 
             detected.sort()
             self.font_list_widget.addItems(detected)
