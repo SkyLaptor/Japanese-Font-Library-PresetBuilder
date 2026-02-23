@@ -37,6 +37,11 @@ class Cache:
             # 親ディレクトリがなければ作成
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.path, "w", encoding=ENCODE) as f:
+                # Dumper を指定して、アンカー/エイリアスを無効化する
+                class NoAliasDumper(yaml.SafeDumper):
+                    def ignore_aliases(self, data):
+                        return True
+
                 yaml.dump(self.data, f, allow_unicode=True, sort_keys=False)
         except Exception as e:
             print(f"キャッシュの保存に失敗しました: {e}")

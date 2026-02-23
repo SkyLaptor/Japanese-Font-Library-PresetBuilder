@@ -8,31 +8,39 @@ from models.preset import Preset
 
 def preset_generator(preset: Preset, cache_data: Cache) -> Path:
     """設定に基づいて fontconfig.txt を生成する"""
-    # --- 1. 出力ディレクトリの準備 ---
+    # 出力ディレクトリの準備
     out_dir = preset.output_dir
     # Interfaceフォルダ構造を維持して出力
     interface_out = out_dir / Path(INTERFACE_DIR)
     interface_out.mkdir(parents=True, exist_ok=True)
 
-    # --- 2. 必要なSWFをキャッシュから特定 (ここを先にやる) ---
+    # 必要なSWFをキャッシュから特定
     used_fonts = {m["font_name"] for m in preset.mappings if m["font_name"]}
-    needed_swfs = set()
+
+    # fontconfig.txtに書き出すパスのセット (例: "Interface/fonts_font1.swf")
+    fontlib_paths = set()
+
+    # 物理コピー用の情報リスト (ソースパスとファイル名)
+    copy_tasks = []
 
     for entry in cache_data:
         swf_rel_path = entry.get("swf_path", "")
         font_names = entry.get("font_names", [])
         if any(f in used_fonts for f in font_names):
             # fontconfig.txt に書くパス（Interface/ファイル名）を作成
-            needed_swfs.add(f"{str(INTERFACE_DIR)}/{Path(swf_rel_path).name}")
+            swf_name = Path(swf_rel_path).name
+            fontlib_paths.add(f"{str(INTERFACE_DIR)}/{swf_name}")
+            src_file = preset.swf_dir / swf_rel_path
+            copy_tasks.append((src_file, swf_name))
 
-    # fontconfig.txtの内容
+    # フォント設定ファイルの内容リスト（最後に書き出す）
     lines = []
 
-    # 1. FontLib セクション (特定した needed_swfs を使う)
-    for swf_path in sorted(list(needed_swfs)):
+    # fontlib セクション
+    for swf_path in sorted(list(fontlib_paths)):
         lines.append(f"fontlib \"{swf_path}\"")
 
-    # 2. Map セクション
+    # map セクション
     for m in preset.mappings:
         map_name = m["map_name"]
         font_name = m["font_name"]
@@ -42,10 +50,10 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
         if not font_name:
             continue
 
-        # スカイリムの形式: map "$ConsoleFont" = "Arial" Normal
+        # 書式例: map "$ConsoleFont" = "Arial" Normal
         lines.append(f"map \"{map_name}\" = \"{font_name}\" {weight}")
 
-    # 3. ValidNameChars セクション
+    # validNameChars セクション
     lines.append(f"validNameChars \"{preset.valid_name_chars}\"")
 
     # --- 3. fontconfig.txt / fontconfig_ja.txt の保存 ---
@@ -56,30 +64,13 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
     with open(config_file_ja, "w", encoding=FONTCONFIG_ENCODE) as f:
         f.write("\n".join(lines))
 
-    # --- 4. SWFファイルのコピー ---
-    # 実際に使っているフォント名のセット
-    used_fonts = {m["font_name"] for m in preset.mappings if m["font_name"]}
-
-    needed_swfs = set()
-
-    # キャッシュデータ(リスト)をループで回す
-    for entry in cache_data:
-        swf_rel_path = entry.get("swf_path", "")
-        font_names = entry.get("font_names", [])
-
-        # このSWFの中に、今回使っているフォントが一つでも含まれているか？
-        if any(f in used_fonts for f in font_names):
-            # ファイル名だけ抽出してセットに追加
-            needed_swfs.add(Path(swf_rel_path).name)
-
-    # 特定したSWFをコピー
-    for swf_name in needed_swfs:
-        src_file = preset.swf_dir / swf_name
+    # --- 4. SWFファイルの物理コピー実行 ---
+    for src_file, swf_name in copy_tasks:
         if src_file.exists():
             dest_file = interface_out / swf_name
             shutil.copy2(src_file, dest_file)
-            print(f"✅ SWFをコピーしました: {swf_name}")
+            print(f"✅ SWFをコピーしました (再帰対応): {swf_name}")
         else:
-            print(f"⚠️ 警告: コピー元のファイルが見つかりません: {src_file}")
+            print(f"⚠️ 警告: ファイルが元の場所に見つかりません: {src_file}")
 
-    return config_file
+    return interface_out / "fontconfig.txt"
