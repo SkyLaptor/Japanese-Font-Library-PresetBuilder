@@ -13,42 +13,38 @@ from src.const import (
 )
 
 
-class UserConfig:
-    def __init__(self, user_config_path: Path):
-        self.user_config_path = user_config_path
-        # ユーザー設定ファイルが存在しない場合はデフォルト値を使用する。
-        self.user_config = None
-        if not user_config_path.exists():
-            print(
-                "ユーザー設定ファイルが存在しないため、デフォルト値でユーザー設定ファイルを生成します。"
-            )
-            self.user_config = copy.deepcopy(DEFAULT_USER_CONFIG)
+class Preset:
+    def __init__(self, preset_path: Path):
+        self.preset_path = preset_path
+        # プリセットファイルが存在しない場合はデフォルト値を使用する。
+        self.data = None
+        if not preset_path.exists():
+            print("プリセットファイルが存在しないため、デフォルト値で生成します。")
+            self.data = copy.deepcopy(DEFAULT_USER_CONFIG)
             # --- valid_name_chars の初期値設定 ---
-            if "valid_name_chars" not in self.user_config:
-                self.user_config["valid_name_chars"] = (
-                    self.load_default_validnamechars()
-                )
+            if "valid_name_chars" not in self.data:
+                self.data["valid_name_chars"] = self.load_default_validnamechars()
             self.save()
         else:
-            with open(self.user_config_path, "r", encoding=ENCODE) as f:
-                self.user_config = yaml.safe_load(f)
+            with open(self.preset_path, "r", encoding=ENCODE) as f:
+                self.data = yaml.safe_load(f)
 
     def load(self):
         """YAMLファイルから設定を読み込む"""
-        if self.user_config_path.exists():
+        if self.preset_path.exists():
             try:
-                with open(self.user_config_path, "r", encoding=ENCODE) as f:
+                with open(self.preset_path, "r", encoding=ENCODE) as f:
                     loaded_data = yaml.safe_load(f)
                     if loaded_data:
-                        self.user_config.update(loaded_data)
+                        self.data.update(loaded_data)
             except Exception as e:
                 print(f"ユーザー設定の読み込みに失敗しました: {e}")
 
     def save(self):
         """現在の設定をYAMLファイルに保存する"""
         try:
-            with open(self.user_config_path, "w", encoding=ENCODE) as f:
-                yaml.dump(self.user_config, f, allow_unicode=True, sort_keys=False)
+            with open(self.preset_path, "w", encoding=ENCODE) as f:
+                yaml.dump(self.data, f, allow_unicode=True, sort_keys=False)
         except Exception as e:
             print(f"ユーザー設定の保存に失敗しました: {e}")
 
@@ -82,7 +78,7 @@ class UserConfig:
 
         # 既存のキャッシュがあれば更新、なければ追加
         found = False
-        for entry in self.user_config["cache"]:
+        for entry in self.data["cache"]:
             if entry["swf_path"] == rel_path:
                 entry["modified_date"] = mtime
                 entry["font_names"] = font_names
@@ -90,7 +86,7 @@ class UserConfig:
                 break
 
         if not found:
-            self.user_config["cache"].append(
+            self.data["cache"].append(
                 {
                     "swf_path": rel_path,
                     "modified_date": mtime,
@@ -115,7 +111,7 @@ class UserConfig:
 
         # マッピングされたフォントがどのキャッシュ（SWF）に属しているか探す
         for font in selected_fonts:
-            for entry in self.user_config.get("cache", []):
+            for entry in self.data.get("cache", []):
                 if font in entry.get("font_names", []):
                     # SWFパスを fontlib 用の形式で追加
                     # 慣例的にInterfaceフォルダの中に置く。
@@ -129,7 +125,7 @@ class UserConfig:
     # 便利なゲッター/セッター
     @property
     def swf_dir(self):
-        path_str = self.user_config.get("swf_dir", "")
+        path_str = self.data.get("swf_dir", "")
         # 空文字だったら None を返す（または空のPathを返さないようにする）
         if not path_str:
             return None
@@ -137,43 +133,43 @@ class UserConfig:
 
     @swf_dir.setter
     def swf_dir(self, value: Path):
-        self.user_config["swf_dir"] = str(value)
+        self.data["swf_dir"] = str(value)
 
     @property
     def output_dir(self):
-        return Path(self.user_config["output_dir"])
+        return Path(self.data["output_dir"])
 
     @output_dir.setter
     def output_dir(self, value: Path):
-        self.user_config["output_dir"] = str(value)
+        self.data["output_dir"] = str(value)
 
     @property
     def fontlibs(self):
-        return self.user_config["fontlibs"]
+        return self.data["fontlibs"]
 
     @fontlibs.setter
     def fontlibs(self, value: list):
-        self.user_config["fontlibs"] = value
+        self.data["fontlibs"] = value
 
     @property
     def mappings(self):
-        return self.user_config["mappings"]
+        return self.data["mappings"]
 
     @mappings.setter
     def mappings(self, value: list):
-        self.user_config["mappings"] = value
+        self.data["mappings"] = value
 
     def get_mapping_font(self, map_name: str) -> str:
         """指定されたマップ名に対応する現在のフォント名を取得する"""
-        for m in self.user_config["mappings"]:
+        for m in self.data["mappings"]:
             if m["map_name"] == map_name:
                 return m.get("font_name", "")
         return ""
 
     @property
     def valid_name_chars(self):
-        return self.user_config["valid_name_chars"]
+        return self.data["valid_name_chars"]
 
     @valid_name_chars.setter
     def valid_name_chars(self, value: str):
-        self.user_config["valid_name_chars"] = value
+        self.data["valid_name_chars"] = value

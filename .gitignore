@@ -208,5 +208,6 @@ __marimo__/
 
 # Add.
 data/gamedata/
+data/cache.yml
+preset/*.yml
 settings.yml
-user_config.yml
