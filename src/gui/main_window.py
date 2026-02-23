@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from const import BASE_GROUP, PROGRAM_TITLE
+from const import BASE_GROUP, PRESETS_DIR, PROGRAM_TITLE
+from models.cache import Cache
 from models.settings import Settings
 from models.user_config import UserConfig
 from modules.generator import config_generator
@@ -29,11 +30,12 @@ from modules.swf_parser import swf_parser
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: Settings, user_config: UserConfig):
+    def __init__(self, settings: Settings, user_config: UserConfig, cache: Cache):
         super().__init__()
         self.settings = settings
         self.user_config = user_config
         self.user_config_is_dirty = False  # ユーザー設定変更フラグ
+        self.cache = cache
         self.setWindowTitle(PROGRAM_TITLE)
         self.resize(1100, 700)
 
@@ -43,6 +45,9 @@ class MainWindow(QMainWindow):
 
         # --- 上部：フォルダ選択 ---
         self.setup_folder_selection(main_layout)
+
+        # --- ★ここに追加：プリセット選択エリア ---
+        self.setup_preset_selection(main_layout)
 
         # --- 中央：コンテンツエリア ---
         content_layout = QHBoxLayout()
@@ -133,6 +138,65 @@ class MainWindow(QMainWindow):
         folder_layout.addWidget(self.path_label, stretch=1)
         folder_layout.addWidget(btn_browse)
         layout.addLayout(folder_layout)
+
+    def setup_preset_selection(self, layout):
+        """プリセットの切り替えと別名保存のUIを構築"""
+
+        preset_group = QGroupBox("ユーザープリセット管理")
+        preset_layout = QHBoxLayout(preset_group)
+
+        # 1. プリセット選択
+        preset_layout.addWidget(QLabel("プロファイル:"))
+        self.preset_combo = QComboBox()
+        self.preset_combo.setMinimumWidth(200)
+        self.refresh_preset_list()  # ファイル一覧を取得
+        self.preset_combo.currentTextChanged.connect(self.on_preset_changed)
+        preset_layout.addWidget(self.preset_combo, stretch=1)
+
+        # 2. 別名保存ボタン
+        btn_save_as = QPushButton("別名で保存...")
+        btn_save_as.clicked.connect(self.on_preset_save_as_clicked)
+        preset_layout.addWidget(btn_save_as)
+
+        layout.addWidget(preset_group)
+
+    def refresh_preset_list(self):
+        """PRESETS_DIR 内のYAMLをリストアップしてコンボボックスにセット"""
+
+        if not PRESETS_DIR.exists():
+            PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+
+        # ここを修正: config_path -> user_config_path
+        current_name = self.user_config.user_config_path.stem
+
+        presets = sorted(list(PRESETS_DIR.glob("*.yml")))
+        for p in presets:
+            self.preset_combo.addItem(p.stem)
+
+        self.preset_combo.setCurrentText(current_name)
+        self.preset_combo.blockSignals(False)
+
+    def refresh_ui_from_config(self):
+        """現在の self.user_config の内容を UI（各コンボボックス等）に再反映させる"""
+        # ValidNameCharsを更新
+        self.valid_chars_edit.setText(self.user_config.valid_name_chars)
+
+        # 各フォントマッピングのコンボボックスを更新
+        for map_name, combo in self.combos.items():
+            font_name = self.user_config.get_mapping_font(map_name)
+            combo.blockSignals(True)
+            # もし現在のリストにないフォント名なら追加して選択
+            if font_name and combo.findText(font_name) == -1:
+                combo.addItem(font_name, font_name)
+            combo.setCurrentText(font_name if font_name else "-- 選択なし --")
+            combo.blockSignals(False)
+
+        # 未保存フラグをリセット
+        self.user_config_is_dirty = False
+        self.setWindowTitle(PROGRAM_TITLE)
 
     def setup_left_panel(self, layout):
         left_group = QGroupBox("検出されたフォント名")
@@ -341,7 +405,7 @@ class MainWindow(QMainWindow):
         try:
             self.font_list_widget.clear()
             detected = []
-            current_cache = self.user_config.user_config.get("cache", [])
+            current_cache = self.cache.data
             cache_updated = False
 
             # スキャン実行
@@ -350,8 +414,9 @@ class MainWindow(QMainWindow):
                 fonts = swf_parser(
                     swf, settings=self.settings, cache=current_cache, debug=False
                 )
-                self.user_config.update_swf_cache(swf, fonts)
-                self.user_config.save()  # キャッシュ保存のため、読み込むたびに保存する。
+                # --- キャッシュクラスを更新して即保存
+                self.cache.update_swf_cache(swf, fonts, swf_dir=folder_path)
+                self.cache.save()  # これで cache.yml だけが更新される！
                 cache_updated = True
                 for f in fonts:
                     if f not in detected:
@@ -397,6 +462,54 @@ class MainWindow(QMainWindow):
                 combo.setCurrentIndex(idx)
 
             combo.blockSignals(False)
+
+    def on_preset_save_as_clicked(self):
+        """新しい名前でプリセットを複製保存"""
+        from PySide6.QtWidgets import QInputDialog
+
+        name, ok = QInputDialog.getText(
+            self,
+            "プリセットの別名保存",
+            "プリセット名を入力してください:",
+            QLineEdit.Normal,
+        )
+
+        if ok and name:
+            # 拡張子補完
+            file_name = name if name.endswith(".yml") else f"{name}.yml"
+            new_path = PRESETS_DIR / file_name
+
+            # 保存して切り替え
+            self.user_config.user_config_path = new_path
+            self.user_config.save()
+
+            # Settingsも更新
+            self.settings.last_preset_path = str(new_path)
+            self.settings.save()
+
+            # UIのリストを更新して、今作ったものを選択状態にする
+            self.refresh_preset_list()
+            QMessageBox.information(
+                self, "完了", f"プリセット '{name}' を作成しました。"
+            )
+
+    def on_preset_changed(self, preset_name):
+        from const import PRESETS_DIR
+
+        if not preset_name:
+            return
+
+        preset_path = PRESETS_DIR / f"{preset_name}.yml"
+        if preset_path.exists():
+            # ここを修正: config_path -> user_config_path
+            self.user_config.user_config_path = preset_path
+            self.user_config.load()
+
+            # settingsへの保存（settings.settings だったことを忘れずに！）
+            self.settings.settings["last_preset_path"] = str(preset_path)
+            self.settings.save()
+
+            self.refresh_ui_from_config()
 
     def on_mapping_changed(self, map_name, font_name):
         """設定値のメモリ上更新のみ行う"""

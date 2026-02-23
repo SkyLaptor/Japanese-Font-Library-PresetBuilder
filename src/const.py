@@ -10,11 +10,13 @@ INTERFACE_DIR = Path("Interface")
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 BUILD_DIR = BASE_DIR / "build"
+PRESETS_DIR = BASE_DIR / "preset"
 # プログラム設定ファイル
 SETTINGS_FILE = BASE_DIR / "settings.yml"
 # デフォルトのプログラム設定（settings.ymlを消されたりなど、トラブル時以外は普通は使用されない）
 DEFAULT_SETTINGS = {
     "ffdec_cli": "C:/Program Files (x86)/FFDec/ffdec-cli.exe",
+    "last_preset_path": "",
     "weight_type": [
         "Normal",
         "Bold",
@@ -27,7 +29,7 @@ DEFAULT_SETTINGS = {
 BASE_GROUP = ["special", "console", "every", "book", "handwrite", "mcm", "custom"]
 FLAG_GROUP = ["require", "option"]
 # ユーザー設定ファイル
-USER_CONFIG_FILE = BASE_DIR / "user_config.yml"
+USER_CONFIG_FILE = PRESETS_DIR / "default.yml"
 # デフォルトのユーザー設定ファイル（config.yml消されたりなど、トラブル時以外は普通は使用されない）
 # ゲームが更新されたらなるべく早めに直しておくこと。取り急ぎ実ファイルを直せばいいけど。
 DEFAULT_USER_CONFIG = {
@@ -225,20 +227,35 @@ DEFAULT_USER_CONFIG = {
     ],
     # 文字が多すぎるので、別ファイルで初期化時に埋める data\validNameChars.txt
     # "valid_name_chars": "",
-    "cache": [
-        # {
-        #     # 読み込みキャッシュ対象のパス（swf_dirからの相対）絶対パスだと、swf_dirを移動させたらキャッシュが無効になるため。
-        #     "swf_path": "fonts_example_every.swf",
-        #     # フォーマットを定数化して解釈すること。
-        #     "modified_date": "2026/01/01 00:00:00",
-        #     # やっぱりハッシュの方が良いとなった際の予約。
-        #     "hash": "",
-        #     "font_names": ["example_every"],
-        # },  # サンプル
-    ],
+    # "cache": [
+    #     # {
+    #     #     # 読み込みキャッシュ対象のパス（swf_dirからの相対）絶対パスだと、swf_dirを移動させたらキャッシュが無効になるため。
+    #     #     "swf_path": "fonts_example_every.swf",
+    #     #     # フォーマットを定数化して解釈すること。
+    #     #     "modified_date": "2026/01/01 00:00:00",
+    #     #     # やっぱりハッシュの方が良いとなった際の予約。
+    #     #     "hash": "",
+    #     #     "font_names": ["example_every"],
+    #     # },  # サンプル
+    # ],
 }
 # validNameCharsのデフォルト値
 DEFAULT_VALID_NAME_CHARS = BASE_DIR / "data" / "validNameChars.txt"
+
+# キャッシュ
+CACHE_FILE = DATA_DIR / "cache.yml"
+# キャッシュサンプル
+CACHE = [
+    # {
+    #     # 読み込みキャッシュ対象のパス（swf_dirからの相対）絶対パスだと、swf_dirを移動させたらキャッシュが無効になるため。
+    #     "swf_path": "fonts_example_every.swf",
+    #     # フォーマットを定数化して解釈すること。
+    #     "modified_date": "2026/01/01 00:00:00",
+    #     # やっぱりハッシュの方が良いとなった際の予約。
+    #     "hash": "",
+    #     "font_names": ["example_every"],
+    # },  # サンプル
+]
 
 # 日付フォーマット
 TIME_FORMAT = "%Y/%m/%d %H:%M:%S"

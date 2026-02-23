@@ -45,5 +45,13 @@ class Settings:
         return Path(self.settings["ffdec_cli"])
 
     @property
+    def last_preset_path(self):
+        return self.settings.get("last_preset_path")
+
+    @last_preset_path.setter
+    def last_preset_path(self, value):
+        self.settings["last_preset_path"] = value
+
+    @property
     def weight_type(self):
         return self.settings["weight_type"]
