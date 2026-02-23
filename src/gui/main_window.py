@@ -23,14 +23,14 @@ from PySide6.QtWidgets import (
 
 from const import BASE_GROUP, PRESETS_DIR, PROGRAM_TITLE
 from models.cache import Cache
+from models.preset import Preset
 from models.settings import Settings
-from models.user_config import UserConfig
-from modules.generator import config_generator
+from modules.generator import preset_generator
 from modules.swf_parser import swf_parser
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: Settings, user_config: UserConfig, cache: Cache):
+    def __init__(self, settings: Settings, user_config: Preset, cache: Cache):
         super().__init__()
         self.settings = settings
         self.user_config = user_config
@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
         self.preset_combo.clear()
 
         # ここを修正: config_path -> user_config_path
-        current_name = self.user_config.user_config_path.stem
+        current_name = self.user_config.preset_path.stem
 
         presets = sorted(list(PRESETS_DIR.glob("*.yml")))
         for p in presets:
@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
             new_path = PRESETS_DIR / file_name
 
             # 保存して切り替え
-            self.user_config.user_config_path = new_path
+            self.user_config.preset_path = new_path
             self.user_config.save()
 
             # Settingsも更新
@@ -502,7 +502,7 @@ class MainWindow(QMainWindow):
         preset_path = PRESETS_DIR / f"{preset_name}.yml"
         if preset_path.exists():
             # ここを修正: config_path -> user_config_path
-            self.user_config.user_config_path = preset_path
+            self.user_config.preset_path = preset_path
             self.user_config.load()
 
             # settingsへの保存（settings.settings だったことを忘れずに！）
@@ -579,7 +579,7 @@ class MainWindow(QMainWindow):
             self.user_config.save()
 
             # --- 2. 生成処理実行 ---
-            out_file = config_generator(self.user_config)
+            out_file = preset_generator(self.user_config, self.cache.data)
 
             # --- 3. 完了通知 ---
             print(f"✅ 生成成功: {out_file}")

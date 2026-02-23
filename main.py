@@ -5,8 +5,8 @@ from PySide6.QtWidgets import QApplication
 
 from const import CACHE_FILE, SETTINGS_FILE, USER_CONFIG_FILE
 from models.cache import Cache
+from models.preset import Preset
 from models.settings import Settings
-from models.user_config import UserConfig
 from src.gui.main_window import MainWindow
 
 
@@ -26,7 +26,7 @@ def main():
         user_config_path = Path(USER_CONFIG_FILE)
 
     # 3. ユーザー構成 (各プリセットyml)
-    user_config = UserConfig(user_config_path)
+    user_config = Preset(user_config_path)
     user_config.load()
 
     # 4. キャッシュ
