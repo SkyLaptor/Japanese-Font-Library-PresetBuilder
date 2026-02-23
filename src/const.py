@@ -26,7 +26,7 @@ DEFAULT_SETTINGS = {
 }
 # 一括設定用
 # 入力値の検証とかに使えたらいいな
-BASE_GROUP = ["special", "console", "every", "book", "handwrite", "mcm", "custom"]
+BASE_GROUP = ["every", "book", "handwrite", "console", "special", "mcm", "custom"]
 FLAG_GROUP = ["require", "option"]
 # ユーザー設定ファイル
 USER_CONFIG_FILE = PRESETS_DIR / "default.yml"
