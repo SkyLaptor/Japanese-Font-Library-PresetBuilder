@@ -6,7 +6,7 @@ import yaml
 
 from src.const import (
     DEFAULT_USER_CONFIG,
-    DEFAULT_VALID_NAME_CHARS,
+    DEFAULT_VALIDNAMECHARS_PATH,
     ENCODE,
     INTERFACE_DIR,
     TIME_FORMAT,
@@ -21,7 +21,8 @@ class Preset:
         if not preset_path.exists():
             print("プリセットファイルが存在しないため、デフォルト値で生成します。")
             self.data = copy.deepcopy(DEFAULT_USER_CONFIG)
-            # --- valid_name_chars の初期値設定 ---
+            # validNameCharsデータが存在自体していなければ、デフォルト値を読み込む。
+            # validNameCharsはとても長いため、定数として設定するのではなく別テキストに分離している。
             if "valid_name_chars" not in self.data:
                 self.data["valid_name_chars"] = self.load_default_validnamechars()
             self.save()
@@ -51,22 +52,19 @@ class Preset:
             print(f"ユーザー設定の保存に失敗しました: {e}")
 
     def load_default_validnamechars(self):
-        """外部テキストファイルから初期文字セットを読み込む"""
-        default_file = DEFAULT_VALID_NAME_CHARS
-        if default_file.exists():
+        """デフォルトのvalidNameCharsを読み込む"""
+        if DEFAULT_VALIDNAMECHARS_PATH.exists():
             try:
                 return (
-                    # 改行コードなど制御文字だけ消して読み込み
-                    default_file.read_text(encoding=ENCODE)
+                    # 念のため改行コードなど制御文字を消してから返す
+                    DEFAULT_VALIDNAMECHARS_PATH.read_text(encoding=ENCODE)
                     .replace("\n", "")
                     .replace("\r", "")
                     .replace("\t", "")
                 )
             except Exception as e:
-                print(f"⚠️ 文字セットファイルの読み込みに失敗: {e}")
-
-        # ファイルがない場合のフォールバック（最低限のセット）
-        return "$-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,\"' "
+                print(f"デフォルトvalidNameCharsファイルの読み込みに失敗: {e}")
+                return ""
 
     def update_swf_cache(self, swf_path: Path, font_names: list):
         """解析したフォント名をキャッシュに保存/更新する"""
@@ -76,13 +74,16 @@ class Preset:
         except ValueError:
             rel_path = str(swf_path)
 
-        mtime = datetime.fromtimestamp(swf_path.stat().st_mtime).strftime(TIME_FORMAT)
+        # ファイルの更新日時を取得 フォーマットに注意
+        modified_date = datetime.fromtimestamp(swf_path.stat().st_mtime).strftime(
+            TIME_FORMAT
+        )
 
         # 既存のキャッシュがあれば更新、なければ追加
         found = False
         for entry in self.data["cache"]:
             if entry["swf_path"] == rel_path:
-                entry["modified_date"] = mtime
+                entry["modified_date"] = modified_date
                 entry["font_names"] = font_names
                 found = True
                 break
@@ -91,7 +92,7 @@ class Preset:
             self.data["cache"].append(
                 {
                     "swf_path": rel_path,
-                    "modified_date": mtime,
+                    "modified_date": modified_date,
                     "font_names": font_names,
                     "hash": "",  # 将来用
                 }

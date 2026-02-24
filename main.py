@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from src.const import CACHE_FILE, PRESETS_DIR, SETTINGS_FILE, USER_CONFIG_FILE
+from src.const import CACHE_PATH, PRESETS_DIR, SETTINGS_FILE, USER_CONFIG_FILE
 from src.gui.main_window import MainWindow
 from src.models.cache import Cache
 from src.models.preset import Preset
@@ -34,7 +34,7 @@ def main():
     preset.load()
 
     # 4. キャッシュを読み込み
-    cache = Cache(Path(CACHE_FILE))
+    cache = Cache(Path(CACHE_PATH))
     cache.load()
 
     # GUI描画

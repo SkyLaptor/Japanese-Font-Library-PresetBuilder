@@ -238,22 +238,23 @@ DEFAULT_USER_CONFIG = {
     #     # },  # サンプル
     # ],
 }
-# validNameCharsのデフォルト値
-DEFAULT_VALID_NAME_CHARS = BASE_DIR / "data" / "validNameChars.txt"
+# デフォルトのvalidNameCharsのパス
+DEFAULT_VALIDNAMECHARS_PATH = DATA_DIR / "validNameChars.txt"
 
-# キャッシュ
-CACHE_FILE = DATA_DIR / "cache.yml"
-# キャッシュサンプル
-CACHE = [
+# キャッシュデータのパス
+CACHE_PATH = DATA_DIR / "cache.yml"
+# キャッシュの中身サンプル
+CACHE_DATA = [
     # {
     #     # 読み込みキャッシュ対象のパス（swf_dirからの相対）絶対パスだと、swf_dirを移動させたらキャッシュが無効になるため。
-    #     "swf_path": "fonts_example_every.swf",
-    #     # フォーマットを定数化して解釈すること。
+    #     "swf_path": "example/fonts_example.swf",
+    #     # 時刻フォーマットを定数化して比較に齟齬がでないようにすること。
     #     "modified_date": "2026/01/01 00:00:00",
     #     # やっぱりハッシュの方が良いとなった際の予約。
     #     "hash": "",
-    #     "font_names": ["example_every"],
-    # },  # サンプル
+    #     # 1SWFにはゼロから複数のフォント名が入っている想定。
+    #     "font_names": ["example_every","example_book","example_handwrite"],
+    # },
 ]
 
 # サンプル画像拡張子
