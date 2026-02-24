@@ -15,7 +15,7 @@ PRESETS_DIR = BASE_DIR / "preset"
 SETTINGS_FILE = BASE_DIR / "settings.yml"
 # デフォルトのプログラム設定（settings.ymlを消されたりなど、トラブル時以外は普通は使用されない）
 DEFAULT_SETTINGS = {
-    "ffdec_cli": "C:/Program Files (x86)/FFDec/ffdec-cli.exe",
+    # "ffdec_cli": "C:/Program Files (x86)/FFDec/ffdec-cli.exe",
     "last_preset_path": "",
     "weight_type": [
         "Normal",
