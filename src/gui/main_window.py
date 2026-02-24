@@ -120,14 +120,16 @@ class MainWindow(QMainWindow):
             self.path_label.setText("SWFフォルダが未設定です。選択して下さい。")
 
     def check_environment(self):
-        """環境チェック：FFDecが存在するか"""
-        if not Path(self.settings.ffdec_cli).exists():
-            QMessageBox.critical(
-                self,
-                "環境エラー",
-                f"FFDecが見つかりません。\nパスを確認してください:\n{self.settings.ffdec_cli}",
-            )
-            return False
+        """環境チェック"""
+        # FFDecが存在するか
+        # if not Path(self.settings.ffdec_cli).exists():
+        #     QMessageBox.critical(
+        #         self,
+        #         "環境エラー",
+        #         f"FFDecが見つかりません。\nパスを確認してください:\n{self.settings.ffdec_cli}",
+        #     )
+        #     return False
+        # もしほかにチェックを挟みたくなった時用にのこしておく。
         return True
 
     def setup_folder_selection(self, layout):
@@ -460,7 +462,6 @@ class MainWindow(QMainWindow):
                 # ここで再度解析を依頼
                 font_names = swf_parser(
                     swf_path=swf_path,
-                    settings=self.settings,
                     cache=self.cache.data,  # 最新のキャッシュデータを渡す
                     debug=False,
                 )
