@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -39,8 +38,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings
         self.preset = preset
-        self.preset_is_dirty = False  # ユーザー設定変更フラグ
         self.cache = cache
+        # プリセット変更フラグ。
+        # 何か設定を操作するようなアクションを起こしたらTrueにする。
+        # プリセットを保存するアクションでFalseにする。
+        self.preset_is_dirty = False
+
         self.setWindowTitle(PROGRAM_TITLE)
         self.resize(1100, 700)
 
@@ -48,21 +51,19 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
 
-        # --- 上部：フォルダ選択 ---
+        # --- 上部 ---
+        # フォントSWF読み込みフォルダ選択エリア
         self.setup_folder_selection(main_layout)
-
-        # --- ★ここに追加：プリセット選択エリア ---
+        # プリセット選択エリア
         self.setup_preset_selection(main_layout)
 
-        # --- 中央：コンテンツエリア ---
+        # --- 中央 ---
+        # ベースレイアウト
         content_layout = QHBoxLayout()
-
-        # 左側：検出されたフォント一覧
+        # 左側: フォント名一覧
         self.setup_left_panel(content_layout)
-
-        # 右側：タブによるカテゴリ別マッピング
+        # 右側：カテゴリ別マッピング
         self.setup_right_panel(content_layout)
-
         main_layout.addLayout(content_layout)
 
         # --- 下部：実行エリア ---
@@ -104,43 +105,26 @@ class MainWindow(QMainWindow):
         # validNameCharsと保存などのボタンが入ったレイアウトを設定
         main_layout.addLayout(bottom_area)
 
-        # 起動時の初期スキャン
-        self.initial_scan()
+        # 画面起動時の初期動作
+        # 初期値を読み込んだり起動環境を確認したり
+        self.window_init()
 
-    def initial_scan(self):
-        """起動時の初期動作を管理"""
-        # 1. まずはFFDecのチェック（ダメならここで即終了）
-        ffdec_check = self.check_environment()
-        if not ffdec_check:
-            sys.exit(1)
-
-        # 2. キャッシュからデータを読み込んでUIに反映する（スキャンはしない）
+    def window_init(self):
+        # プリセットにSWFフォルダが設定されていて、ちゃんと存在していれば表示する。
         if self.preset.swf_dir and self.preset.swf_dir.exists():
-            print("キャッシュからフォントリストを読み込みます...")
-            self.refresh_ui_from_cache()
-            self.path_label.setText(f"現在のフォルダ: {self.preset.swf_dir}")
+            # resolveしなくても、もともと絶対パスで入ってる。
+            self.swf_dir_path_label.setText(
+                f"参照中のSWFフォルダ: {self.preset.swf_dir}"
+            )
         else:
-            self.path_label.setText("SWFフォルダが未設定です。選択して下さい。")
-
-    def check_environment(self):
-        """環境チェック"""
-        # FFDecが存在するか
-        # if not Path(self.settings.ffdec_cli).exists():
-        #     QMessageBox.critical(
-        #         self,
-        #         "環境エラー",
-        #         f"FFDecが見つかりません。\nパスを確認してください:\n{self.settings.ffdec_cli}",
-        #     )
-        #     return False
-        # もしほかにチェックを挟みたくなった時用にのこしておく。
-        return True
+            self.swf_dir_path_label.setText("参照中のSWFフォルダ: (未設定)")
 
     def setup_folder_selection(self, layout):
         folder_layout = QHBoxLayout()
 
         # パスの表示ラベル
         path = str(self.preset.swf_dir) if self.preset.swf_dir else "未選択"
-        self.path_label = QLabel(f"現在のフォルダ: {path}")
+        self.swf_dir_path_label = QLabel(f"現在のフォルダ: {path}")
 
         # フォルダ選択ボタン
         btn_browse = QPushButton("フォルダを開く")
@@ -154,7 +138,7 @@ class MainWindow(QMainWindow):
         self.btn_rescan.setEnabled(bool(self.preset.swf_dir))
 
         # レイアウトへの追加順序（左からラベル、開く、フォントを読み込む）
-        folder_layout.addWidget(self.path_label, stretch=1)
+        folder_layout.addWidget(self.swf_dir_path_label, stretch=1)
         folder_layout.addWidget(btn_browse)  # ←これが抜けていました！
         folder_layout.addWidget(self.btn_rescan)
 
@@ -452,7 +436,7 @@ class MainWindow(QMainWindow):
         if dir_path:
             p = Path(dir_path)
             self.preset.swf_dir = p
-            self.path_label.setText(f"現在のフォルダ: {str(p)}")
+            self.swf_dir_path_label.setText(f"現在のフォルダ: {str(p)}")
             self.btn_rescan.setEnabled(True)  # ボタンを有効化
             self.refresh_fonts(p)
             self.preset.save()
@@ -579,44 +563,48 @@ class MainWindow(QMainWindow):
 
     def on_preset_save_as_clicked(self):
         """新しい名前でプリセットを複製保存"""
-        name, ok = QInputDialog.getText(
+        new_preset_name, ok = QInputDialog.getText(
             self,
             "プリセットの別名保存",
             "プリセット名を入力してください:",
             QLineEdit.Normal,
         )
 
-        if ok and name.strip():
+        if ok and new_preset_name.strip():
             # ファイル名の正規化
-            name = name.strip()
-            file_name = name if name.lower().endswith(".yml") else f"{name}.yml"
-            new_path = PRESETS_DIR / file_name
+            new_preset_name = new_preset_name.strip()
+            new_preset_name_norm = (
+                new_preset_name
+                if new_preset_name.lower().endswith(".yml")
+                else f"{new_preset_name}.yml"
+            )
+            new_preset_path = PRESETS_DIR / new_preset_name_norm
 
-            if new_path.exists():
+            if new_preset_path.exists():
                 reply = QMessageBox.warning(
                     self,
                     "上書き確認",
-                    f"'{file_name}' は既に存在します。上書きしますか？",
+                    f"'{new_preset_name_norm}' は既に存在します。上書きしますか？",
                     QMessageBox.Yes | QMessageBox.No,
                 )
                 if reply == QMessageBox.No:
                     return
 
             # 保存して切り替え
-            self.preset.preset_path = new_path
+            self.preset.preset_path = new_preset_path
             self.preset.save()
 
             # 設定クラスの属性に保存 (プロパティ経由を想定)
-            self.settings.last_preset_path = str(new_path)
+            self.settings.last_preset_name = str(new_preset_name_norm)
             self.settings.save()
 
             # UIの更新
             self.refresh_preset_list()
             # リスト更新後に新しい項目を選択（シグナルが発生して load が走る）
-            self.preset_combo.setCurrentText(new_path.stem)
+            self.preset_combo.setCurrentText(new_preset_path.stem)
 
             QMessageBox.information(
-                self, "完了", f"プリセット '{name}' を作成しました。"
+                self, "完了", f"プリセット '{new_preset_name}' を作成しました。"
             )
 
     def on_preset_changed(self, preset_name):
@@ -650,7 +638,7 @@ class MainWindow(QMainWindow):
             self.preset.load()
 
             # settings.settings ではなくインスタンス属性に合わせる
-            self.settings.last_preset_path = str(new_path)
+            self.settings.last_preset_name = str(new_path)
             self.settings.save()
 
             self.refresh_ui_from_config()
@@ -826,3 +814,16 @@ class MainWindow(QMainWindow):
                 event.ignore()  # キャンセル
         else:
             event.accept()
+
+    def check_environment(self):
+        """環境チェック"""
+        # FFDecが存在するか
+        # if not Path(self.settings.ffdec_cli).exists():
+        #     QMessageBox.critical(
+        #         self,
+        #         "環境エラー",
+        #         f"FFDecが見つかりません。\nパスを確認してください:\n{self.settings.ffdec_cli}",
+        #     )
+        #     return False
+        # もしほかにチェックを挟みたくなった時用にのこしておく。
+        return True

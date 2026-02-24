@@ -41,16 +41,12 @@ class Settings:
             print(f"システム設定ファイルの保存に失敗しました: {e}")
 
     @property
-    def ffdec_cli(self):
-        return Path(self.settings["ffdec_cli"])
+    def last_preset_name(self):
+        return self.settings.get("last_preset_name")
 
-    @property
-    def last_preset_path(self):
-        return self.settings.get("last_preset_path")
-
-    @last_preset_path.setter
-    def last_preset_path(self, value):
-        self.settings["last_preset_path"] = value
+    @last_preset_name.setter
+    def last_preset_name(self, value):
+        self.settings["last_preset_name"] = value
 
     @property
     def weight_type(self):
