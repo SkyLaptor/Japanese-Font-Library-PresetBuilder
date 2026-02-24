@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -29,6 +29,7 @@ from models.preset import Preset
 from models.settings import Settings
 from modules.generator import preset_generator
 from modules.swf_parser import swf_parser
+from src.modules.find_preview_image import find_preview_image
 
 
 class MainWindow(QMainWindow):
@@ -218,8 +219,27 @@ class MainWindow(QMainWindow):
     def setup_left_panel(self, layout):
         left_group = QGroupBox("検出されたフォント名")
         left_layout = QVBoxLayout(left_group)
+
+        # フォントリスト
         self.font_list_widget = QListWidget()
-        left_layout.addWidget(self.font_list_widget)
+        # 項目が選択されたらプレビューを更新するシグナルを接続
+        self.font_list_widget.itemSelectionChanged.connect(self.update_font_preview)
+        left_layout.addWidget(self.font_list_widget, stretch=2)
+
+        # ★プレビュー画像表示エリア
+        self.preview_label = QLabel("プレビュー")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        from PySide6.QtWidgets import QSizePolicy
+
+        # 「自分からはサイズを主張しない（親のレイアウトに従う）」という設定
+        self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.preview_label.setMinimumHeight(150)  # 画像の収まりが良い高さ
+        self.preview_label.setStyleSheet("border: 1px solid #444; background: #222;")
+        # アスペクト比を維持して拡大縮小させる設定
+        self.preview_label.setScaledContents(False)
+
+        left_layout.addWidget(self.preview_label, stretch=1)
+
         layout.addWidget(left_group, stretch=1)
 
     def setup_right_panel(self, layout):
@@ -489,6 +509,44 @@ class MainWindow(QMainWindow):
             )
         finally:
             progress.close()
+
+    def update_font_preview(self):
+        """リストで選択されたフォントのプレビュー画像を表示する"""
+        selected_item = self.font_list_widget.currentItem()
+        if not selected_item:
+            self.preview_label.setText("No selection")
+            self.preview_label.setPixmap(QPixmap())  # クリア
+            return
+
+        font_name = selected_item.text()
+
+        # 1. キャッシュからこのフォント名を持つ SWF パスを探す
+        found_swf_path = None
+        for entry in self.cache.data:
+            if font_name in entry.get("font_names", []):
+                # 保存されている相対パスを絶対パスに戻す
+                found_swf_path = self.preset.swf_dir / entry["swf_path"]
+                break
+
+        if not found_swf_path:
+            self.preview_label.setText("SWF not found")
+            return
+
+        # 2. 前のステップで作った find_preview_image を呼び出す
+        # (modules.utils 等に切り出している想定)
+        img_path = find_preview_image(found_swf_path)
+
+        if img_path and img_path.exists():
+            pixmap = QPixmap(str(img_path))
+            # ラベルのサイズに合わせてリサイズ（アスペクト比維持）
+            scaled_pixmap = pixmap.scaled(
+                self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self.preview_label.setPixmap(scaled_pixmap)
+            self.preview_label.setText("")  # テキストを消す
+        else:
+            self.preview_label.setPixmap(QPixmap())
+            self.preview_label.setText(f"プレビュー画像が見つかりません\n{font_name}")
 
     def update_combos_with_detected(self, detected):
         """コンボボックスの中身を更新する"""

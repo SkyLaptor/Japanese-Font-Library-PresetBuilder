@@ -257,5 +257,10 @@ CACHE = [
     # },  # サンプル
 ]
 
+# サンプル画像拡張子
+SAMPLE_IMG_EXT = [".png", ".jpg", ".jpeg"]
+# サンプル画像ファイル名
+SAMPLE_IMG_NAME = ["sample", "preview", "image"]
+
 # 日付フォーマット
 TIME_FORMAT = "%Y/%m/%d %H:%M:%S"
