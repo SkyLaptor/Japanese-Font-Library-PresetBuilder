@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -229,7 +231,6 @@ class MainWindow(QMainWindow):
         # ★プレビュー画像表示エリア
         self.preview_label = QLabel("プレビュー")
         self.preview_label.setAlignment(Qt.AlignCenter)
-        from PySide6.QtWidgets import QSizePolicy
 
         # 「自分からはサイズを主張しない（親のレイアウトに従う）」という設定
         self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -775,8 +776,6 @@ class MainWindow(QMainWindow):
 
             # 「出力先を開く」が押されたらエクスプローラーで開く
             if msg_box.clickedButton() == open_folder_btn:
-                import os
-
                 os.startfile(out_file.parent)
 
         except Exception as e:
@@ -808,7 +807,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """閉じる時の保存確認"""
-        from PySide6.QtWidgets import QMessageBox  # ここでインポートしてもOK
 
         if self.preset_is_dirty:
             reply = QMessageBox.question(
