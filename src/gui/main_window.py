@@ -39,48 +39,44 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.preset = preset
         self.cache = cache
-        # プリセット変更フラグ。
-        # 何か設定を操作するようなアクションを起こしたらTrueにする。
-        # プリセットを保存するアクションでFalseにする。
+        # プリセット変更フラグ
+        # 何か設定を操作するようなアクションを起こしたらTrueに、プリセットを保存するアクションでFalseにすること！
         self.preset_is_dirty = False
 
+        # ウィンドウ
         self.setWindowTitle(PROGRAM_TITLE)
         self.resize(1100, 700)
-
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
+        widget_main = QWidget()
+        self.setCentralWidget(widget_main)
+        # 全ての画面コンポーネントの基底となる「垂直」レイアウト
+        vboxlayout_main = QVBoxLayout(widget_main)
 
         # --- 上部 ---
+        # 分割の必要がないので、そのままメインレイアウトに挿入。
+        # メインレイアウトは垂直レイアウトなので上から順に入る。
         # フォントSWF読み込みフォルダ選択エリア
-        self.setup_folder_selection(main_layout)
+        self.setup_swf_dir_selection(vboxlayout_main)
         # プリセット選択エリア
-        self.setup_preset_selection(main_layout)
+        self.setup_preset_selection(vboxlayout_main)
 
         # --- 中央 ---
-        # ベースレイアウト
-        content_layout = QHBoxLayout()
-        # 左側: フォント名一覧
-        self.setup_left_panel(content_layout)
-        # 右側：カテゴリ別マッピング
-        self.setup_right_panel(content_layout)
-        main_layout.addLayout(content_layout)
+        # 左右に分割したいので一旦「水平」レイアウトを用意して部品を挿入し、
+        # それをメインの垂直レイアウトに挿入する。
+        # 左から順に入る。
+        # 中央分割用水平レイアウト
+        hboxlayout_center = QHBoxLayout()
+        # フォント名一覧
+        self.setup_font_names(hboxlayout_center)
+        # カテゴリ別マッピング
+        self.setup_mappings(hboxlayout_center)
+        # 中央分割用水平レイアウトをメインレイアウトに挿入
+        vboxlayout_main.addLayout(hboxlayout_center)
 
         # --- 下部：実行エリア ---
+        # validNameCharsエリア
+        self.setup_validnamechars_input(vboxlayout_main)
+
         bottom_area = QVBoxLayout()  # 垂直レイアウトで入力欄とボタンを分ける
-
-        # --- validNameChars 入力セクション ---
-        valid_chars_layout = QHBoxLayout()
-        valid_chars_label = QLabel("ValidNameChars:")
-        self.valid_chars_edit = QLineEdit()  # 1行入力欄
-        self.valid_chars_edit.setText(self.preset.valid_name_chars)
-        self.valid_chars_edit.setPlaceholderText("$-_0123456789...")
-        self.valid_chars_edit.textChanged.connect(self.on_valid_chars_changed)
-
-        valid_chars_layout.addWidget(valid_chars_label)
-        valid_chars_layout.addWidget(self.valid_chars_edit, stretch=1)
-        # validNameCharsのレイアウトを bottom_area に入れる
-        bottom_area.addLayout(valid_chars_layout)
 
         # --- ボタンエリア ---
         save_layout = QHBoxLayout()
@@ -103,67 +99,146 @@ class MainWindow(QMainWindow):
 
         # レイアウトを正しく組み立て
         # validNameCharsと保存などのボタンが入ったレイアウトを設定
-        main_layout.addLayout(bottom_area)
+        vboxlayout_main.addLayout(bottom_area)
 
         # 画面起動時の初期動作
         # 初期値を読み込んだり起動環境を確認したり
         self.window_init()
 
     def window_init(self):
-        # プリセットにSWFフォルダが設定されていて、ちゃんと存在していれば表示する。
+        return
+
+    def setup_swf_dir_selection(self, layout):
+        """SWFフォルダ選択レイアウトのセットアップ"""
+        hboxlayout_swf_dir = QHBoxLayout()
+
+        # SWFフォルダのパス表示ラベル
+        label_swf_dir_path = QLabel()
+        label_swf_dir_path_prefix = "参照中のSWFフォルダ: "
+        # SWFフォルダが設定されていて、かつ存在しているか。
         if self.preset.swf_dir and self.preset.swf_dir.exists():
             # resolveしなくても、もともと絶対パスで入ってる。
-            self.swf_dir_path_label.setText(
-                f"参照中のSWFフォルダ: {self.preset.swf_dir}"
+            label_swf_dir_path.setText(
+                f"{label_swf_dir_path_prefix}{self.preset.swf_dir}"
             )
         else:
-            self.swf_dir_path_label.setText("参照中のSWFフォルダ: (未設定)")
+            label_swf_dir_path.setText(f"{label_swf_dir_path_prefix}(未設定)")
 
-    def setup_folder_selection(self, layout):
-        folder_layout = QHBoxLayout()
+        # SWFフォルダ閲覧ボタン
+        button_browse_swf_dir = QPushButton("フォルダを開く")
+        button_browse_swf_dir.clicked.connect(self.button_browse_swf_dir_clicked)
 
-        # パスの表示ラベル
-        path = str(self.preset.swf_dir) if self.preset.swf_dir else "未選択"
-        self.swf_dir_path_label = QLabel(f"現在のフォルダ: {path}")
+        # SWFフォルダ読み込みボタン
+        button_load_swf_dir = QPushButton("読み込む")
+        button_load_swf_dir.clicked.connect(self.button_load_swf_dir_clicked)
+        button_load_swf_dir.setEnabled(bool(self.preset.swf_dir))
 
-        # フォルダ選択ボタン
-        btn_browse = QPushButton("フォルダを開く")
-        btn_browse.clicked.connect(self.select_folder)
+        # レイアウトへ各種部品の挿入
+        hboxlayout_swf_dir.addWidget(label_swf_dir_path, stretch=1)
+        hboxlayout_swf_dir.addWidget(button_browse_swf_dir)
+        hboxlayout_swf_dir.addWidget(button_load_swf_dir)
 
-        # 読み込みボタン
-        # 強制スキャンはさせたくないが、一覧が更新されないため、利用者の動線を活用する
-        # 再スキャンという名前をやめて、フォントを読み込むという名前にすれば、一覧が空なら押してくれるはず。
-        self.btn_rescan = QPushButton("フォントを読み込む")
-        self.btn_rescan.clicked.connect(self.on_rescan_clicked)
-        self.btn_rescan.setEnabled(bool(self.preset.swf_dir))
+        layout.addLayout(hboxlayout_swf_dir)
 
-        # レイアウトへの追加順序（左からラベル、開く、フォントを読み込む）
-        folder_layout.addWidget(self.swf_dir_path_label, stretch=1)
-        folder_layout.addWidget(btn_browse)  # ←これが抜けていました！
-        folder_layout.addWidget(self.btn_rescan)
+    def button_browse_swf_dir_clicked(self):
+        """SWFフォルダ閲覧ボタン押下時のアクション"""
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "フォントSWFが含まれるフォルダを選択"
+        )
+        if dir_path:
+            p = Path(dir_path)
+            self.preset.swf_dir = p
+            self.label_swf_dir_path.setText(f"現在のフォルダ: {str(p)}")
+            self.button_load_swf_dir.setEnabled(True)  # ボタンを有効化
+            self.refresh_font_names_list(p)
+            self.preset.save()
 
-        layout.addLayout(folder_layout)
+    def button_load_swf_dir_clicked(self):
+        """SWFフォルダ読み込みボタン押下時のアクション"""
+        # SWFフォルダが設定されていて、かつ存在しているか。
+        if self.preset.swf_dir and self.preset.swf_dir.exists():
+            self.refresh_font_names_list(self.preset.swf_dir)
+            # QMessageBox.information(self, "完了", "フォルダの内容を読み込みました。")
+        else:
+            QMessageBox.warning(self, "エラー", "フォルダが見つかりません。")
+
+    def refresh_font_names_list(self, swf_dir_path: Path):
+        """フォント名一覧を更新する"""
+        # フォント名一覧更新処理中ダイアログを表示する。
+        message = (
+            "フォントの一覧を更新しています...\n"
+            "※フォントファイル数が多い場合、解析に時間がかかることがあります。"
+        )
+        progress = QProgressDialog(message, None, 0, 0, self)
+        progress.setWindowTitle("処理中")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        QGuiApplication.processEvents()
+
+        try:
+            # フォント名一覧
+            # この中に{"font_name": "apricot_every", "swf_path": "apricot/fonts_apricot_every.swf"} といった感じでずらずら入る予定
+            font_names_list = []
+            # フォント名一覧部品もリセット
+            self.list_widget_font_names.clear()
+
+            # SWFフォルダ内のSWFファイルを再帰的に検査していく。
+            for swf_path in swf_dir_path.rglob("*.swf"):
+                # SWFパーサーを使用して、フォントSWF内にあるフォント名を取得（1SWFに0～Xのフォント名が格納されている。）
+                font_names = swf_parser(
+                    swf_path=swf_path,
+                    cache=self.cache.data,  # キャッシュ情報を渡して高速化
+                    debug=False,
+                )
+
+                # SWF内にフォント名が1つでも入っていれば
+                if font_names:
+                    # キャッシュに記録する。このキャッシュはSWFファイルとフォント名の逆引きにも使うから大事にしてね。
+                    self.cache.update_swf_cache(
+                        swf_path=swf_path, font_names=font_names, swf_dir=swf_dir_path
+                    )
+
+                    for font_name in font_names:
+                        # 例 {"font_name": "apricot_every", "swf_path": "apricot/fonts_apricot_every.swf"}
+                        font_names_list.append(
+                            {"font_name": font_name, "swf_path": swf_path}
+                        )
+
+            # フォント名一覧部品に読み込んだフォント名一覧を綺麗に並び替えて投入
+            sorted_font_names_list = sorted(list(font_names_list))
+            self.list_widget_font_names.addItems(sorted_font_names_list)
+            # TODO: これ何してるのか
+            self.update_combos_with_detected(sorted_font_names_list)
+
+        except Exception as e:
+            msg = "フォント名一覧の更新中にエラーが発生しました:"
+            print(f"{msg} {e}")
+            QMessageBox.critical(self, "エラー", f"{msg}\n{e}")
+        finally:
+            # 何があろうとも一覧更新処理中ダイアログを閉じる。
+            progress.close()
 
     def setup_preset_selection(self, layout):
-        """プリセットの切り替えと別名保存のUIを構築"""
-
-        preset_group = QGroupBox("プリセット管理")
-        preset_layout = QHBoxLayout(preset_group)
+        """プリセット選択レイアウトのセットアップ"""
+        groupbox_preset = QGroupBox("プリセット管理")
+        boxlayout_preset = QHBoxLayout(groupbox_preset)
 
         # 1. プリセット選択
-        preset_layout.addWidget(QLabel("プリセット:"))
+        boxlayout_preset.addWidget(QLabel("プリセット:"))
         self.preset_combo = QComboBox()
         self.preset_combo.setMinimumWidth(200)
         self.refresh_preset_list()  # ファイル一覧を取得
         self.preset_combo.currentTextChanged.connect(self.on_preset_changed)
-        preset_layout.addWidget(self.preset_combo, stretch=1)
+        boxlayout_preset.addWidget(self.preset_combo, stretch=1)
 
         # 2. 別名保存ボタン
         btn_save_as = QPushButton("別名で保存...")
         btn_save_as.clicked.connect(self.on_preset_save_as_clicked)
-        preset_layout.addWidget(btn_save_as)
+        boxlayout_preset.addWidget(btn_save_as)
 
-        layout.addWidget(preset_group)
+        # レイアウトに組み立てた部品を挿入
+        layout.addWidget(groupbox_preset)
 
     def refresh_preset_list(self):
         """PRESETS_DIR 内のYAMLをリストアップしてコンボボックスにセット"""
@@ -186,7 +261,7 @@ class MainWindow(QMainWindow):
     def refresh_ui_from_config(self):
         """現在の self.preset の内容を UI（各コンボボックス等）に再反映させる"""
         # ValidNameCharsを更新
-        self.valid_chars_edit.setText(self.preset.valid_name_chars)
+        self.lineedit_validnamechars.setText(self.preset.valid_name_chars)
 
         # 各フォントマッピングのコンボボックスを更新
         for map_name, combo in self.combos.items():
@@ -202,15 +277,17 @@ class MainWindow(QMainWindow):
         self.preset_is_dirty = False
         self.setWindowTitle(PROGRAM_TITLE)
 
-    def setup_left_panel(self, layout):
-        left_group = QGroupBox("検出されたフォント名")
+    def setup_font_names(self, layout):
+        left_group = QGroupBox("フォルダ内に存在するフォント名")
         left_layout = QVBoxLayout(left_group)
 
         # フォントリスト
-        self.font_list_widget = QListWidget()
+        self.list_widget_font_names = QListWidget()
         # 項目が選択されたらプレビューを更新するシグナルを接続
-        self.font_list_widget.itemSelectionChanged.connect(self.update_font_preview)
-        left_layout.addWidget(self.font_list_widget, stretch=2)
+        self.list_widget_font_names.itemSelectionChanged.connect(
+            self.update_font_preview
+        )
+        left_layout.addWidget(self.list_widget_font_names, stretch=2)
 
         # ★プレビュー画像表示エリア
         self.preview_label = QLabel("プレビュー")
@@ -227,7 +304,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(left_group, stretch=1)
 
-    def setup_right_panel(self, layout):
+    def setup_mappings(self, layout):
         right_group = QGroupBox("fontconfig マッピング (カテゴリ別)")
         right_main_layout = QVBoxLayout(right_group)
 
@@ -356,7 +433,7 @@ class MainWindow(QMainWindow):
     # --- アクション用メソッド ---
     def apply_selected_to_row(self, map_name: str):
         """左のリストで選択されているフォント名を、指定した行のコンボボックスにセットする"""
-        selected_item = self.font_list_widget.currentItem()
+        selected_item = self.list_widget_font_names.currentItem()
         if selected_item:
             font_name = selected_item.text()
             combo = self.combos.get(map_name)
@@ -372,7 +449,7 @@ class MainWindow(QMainWindow):
 
     def apply_font_to_group(self, group_name: str):
         """左のリストで選択されているフォント名を、グループ内の全ての行に適用する"""
-        selected_item = self.font_list_widget.currentItem()
+        selected_item = self.list_widget_font_names.currentItem()
         if not selected_item:
             return
 
@@ -387,7 +464,7 @@ class MainWindow(QMainWindow):
     def refresh_ui_from_cache(self):
         """スキャンを行わず、現在のフォルダ配下のキャッシュデータのみをUIに反映する"""
         if not self.preset.swf_dir:
-            self.font_list_widget.clear()
+            self.list_widget_font_names.clear()
             return
 
         # 比較用に Path オブジェクト化
@@ -415,89 +492,13 @@ class MainWindow(QMainWindow):
         sorted_fonts = sorted(list(detected))
 
         # UI反映
-        self.font_list_widget.clear()
-        self.font_list_widget.addItems(sorted_fonts)
+        self.list_widget_font_names.clear()
+        self.list_widget_font_names.addItems(sorted_fonts)
         self.update_combos_with_detected(sorted_fonts)
-
-    # --- 新設：再スキャンボタンのアクション ---
-    def on_rescan_clicked(self):
-        """明示的にスキャンを実行する"""
-        if self.preset.swf_dir and self.preset.swf_dir.exists():
-            self.refresh_fonts(self.preset.swf_dir)
-            # QMessageBox.information(self, "完了", "フォントの読み込みが完了しました。")
-        else:
-            QMessageBox.warning(self, "エラー", "フォルダが見つかりません。")
-
-    # select_folder の最後でボタンの有効化状態を更新するように修正
-    def select_folder(self):
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "フォントSWFが含まれるフォルダを選択"
-        )
-        if dir_path:
-            p = Path(dir_path)
-            self.preset.swf_dir = p
-            self.swf_dir_path_label.setText(f"現在のフォルダ: {str(p)}")
-            self.btn_rescan.setEnabled(True)  # ボタンを有効化
-            self.refresh_fonts(p)
-            self.preset.save()
-
-    def refresh_fonts(self, swf_dir_path: Path):
-        if not self.check_environment():
-            return
-
-        message = (
-            "フォントリストを更新しています...\n"
-            "※フォントファイル数が多い場合、解析に時間がかかることがあります。"
-        )
-        progress = QProgressDialog(message, None, 0, 0, self)
-        progress.setWindowTitle("処理中")
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
-
-        QGuiApplication.processEvents()
-
-        try:
-            # 1. フォルダが変わったので、今回のスキャン結果を入れる変数は空から始める
-            detected = set()
-
-            # スキャン実行
-            for swf_path in swf_dir_path.rglob("*.swf"):
-                # swf_parser内でキャッシュの有無を確認しているはずですが、
-                # ここで再度解析を依頼
-                font_names = swf_parser(
-                    swf_path=swf_path,
-                    cache=self.cache.data,  # 最新のキャッシュデータを渡す
-                    debug=False,
-                )
-
-                if font_names:
-                    # 全体キャッシュ(self.cache.data)は壊さず、新しい情報を追加・更新する
-                    self.cache.update_swf_cache(
-                        swf_path=swf_path, font_names=font_names, swf_dir=swf_dir_path
-                    )
-                    # ★「今回の表示対象」にだけ追加
-                    detected.update(font_names)
-
-            # キャッシュ全体を保存（他のフォルダのデータも維持されたまま保存されます）
-            self.cache.save()
-
-            # UI反映
-            sorted_fonts = sorted(list(detected))
-            self.font_list_widget.clear()
-            self.font_list_widget.addItems(sorted_fonts)
-            self.update_combos_with_detected(sorted_fonts)
-
-        except Exception as e:
-            print(f"スキャンエラー: {e}")
-            QMessageBox.critical(
-                self, "エラー", f"スキャン中にエラーが発生しました:\n{e}"
-            )
-        finally:
-            progress.close()
 
     def update_font_preview(self):
         """リストで選択されたフォントのプレビュー画像を表示する"""
-        selected_item = self.font_list_widget.currentItem()
+        selected_item = self.list_widget_font_names.currentItem()
         if not selected_item:
             self.preview_label.setText("No selection")
             self.preview_label.setPixmap(QPixmap())  # クリア
@@ -661,11 +662,29 @@ class MainWindow(QMainWindow):
                 break
         # self.config.save() はここでは呼ばない！
 
-    def on_valid_chars_changed(self, text):
-        """文字セットが変更されたらフラグを立てる"""
+    def setup_validnamechars_input(self, layout):
+        """validNameChars入力レイアウトのセットアップ"""
+        hboxlayout_validnamechars = QHBoxLayout()
+
+        label_validnamechars = QLabel("キャラ名に使用できる文字:")
+        self.lineedit_validnamechars = QLineEdit()
+        self.lineedit_validnamechars.setText(self.preset.valid_name_chars)
+        self.lineedit_validnamechars.textChanged.connect(self.on_validnamechars_changed)
+
+        hboxlayout_validnamechars.addWidget(label_validnamechars)
+        hboxlayout_validnamechars.addWidget(self.lineedit_validnamechars, stretch=1)
+
+        # レイアウトに組み立てた部品を挿入
+        layout.addLayout(hboxlayout_validnamechars)
+
+    def on_validnamechars_changed(self, text):
+        """validNameCharsが変更されたときのアクション"""
+        # もともとプリセットに記録されている内容から変更されていれば、
+        # プリセットの内容を更新した上で変更フラグを立てる。
         if self.preset.valid_name_chars != text:
             self.preset.valid_name_chars = text
             self.preset_is_dirty = True
+            # ウィンドウタイトルに「 *」を付ける事で、「何か変更したよ」というのを視覚的に通知している。
             self.setWindowTitle(f"{PROGRAM_TITLE} *")
 
     def on_generate_clicked(self):
@@ -693,8 +712,8 @@ class MainWindow(QMainWindow):
             # --- 0.5 バリデーション：フォントの存在チェック ---
             # 現在のリスト(UI)に表示されているフォントをセットにする
             available_fonts = {
-                self.font_list_widget.item(i).text()
-                for i in range(self.font_list_widget.count())
+                self.list_widget_font_names.item(i).text()
+                for i in range(self.list_widget_font_names.count())
             }
 
             not_found_in_list = []
