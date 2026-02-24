@@ -43,6 +43,8 @@ class Preset:
     def save(self):
         """現在の設定をYAMLファイルに保存する"""
         try:
+            # 親ディレクトリがなければ作成
+            self.preset_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.preset_path, "w", encoding=ENCODE) as f:
                 yaml.dump(self.data, f, allow_unicode=True, sort_keys=False)
         except Exception as e:
