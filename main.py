@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from src.const import CACHE_FILE, SETTINGS_FILE, USER_CONFIG_FILE
+from src.const import CACHE_FILE, PRESETS_DIR, SETTINGS_FILE, USER_CONFIG_FILE
 from src.gui.main_window import MainWindow
 from src.models.cache import Cache
 from src.models.preset import Preset
@@ -18,10 +18,14 @@ def main():
     settings.load()
 
     # 2. どのプリセットを使うか決定
-    # 最終プリセット設定がsettingsにあり、かつプリセットファイルが存在する場合にそれを使う
-    last_preset_path = settings.last_preset_path
-    if last_preset_path and Path(last_preset_path).exists():
-        preset_path = Path(last_preset_path)
+    last_preset_name = settings.last_preset_name
+    # 最終プリセット設定がsettingsにあれば、PRESETS_DIR と合体させてフルパスを作る
+    candidate_path = None
+    if last_preset_name:
+        candidate_path = PRESETS_DIR / last_preset_name
+    # プリセットファイル（PRESETS_DIRの中の）が存在する場合にそれを使う
+    if candidate_path is not None and candidate_path.exists():
+        preset_path = candidate_path
     else:
         preset_path = Path(USER_CONFIG_FILE)
 

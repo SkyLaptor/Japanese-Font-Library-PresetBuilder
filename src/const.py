@@ -3,7 +3,7 @@ from pathlib import Path
 PROGRAM_TITLE = "Japanese Font Library - PresetBuilder"
 # ファイル読み書きエンコード
 ENCODE = "utf-8"
-# スカイリムのフォントコンフィグの文字コード
+# スカイリムのフォントコンフィグの文字コード 本来BOM付きらしいが...
 FONTCONFIG_ENCODE = "utf-8"
 INTERFACE_DIR = Path("Interface")
 # 各種ディレクトリ
@@ -15,8 +15,7 @@ PRESETS_DIR = BASE_DIR / "preset"
 SETTINGS_FILE = BASE_DIR / "settings.yml"
 # デフォルトのプログラム設定（settings.ymlを消されたりなど、トラブル時以外は普通は使用されない）
 DEFAULT_SETTINGS = {
-    # "ffdec_cli": "C:/Program Files (x86)/FFDec/ffdec-cli.exe",
-    "last_preset_path": "",
+    "last_preset_name": "",
     "weight_type": [
         "Normal",
         "Bold",
