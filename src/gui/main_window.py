@@ -32,11 +32,11 @@ from modules.swf_parser import swf_parser
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: Settings, user_config: Preset, cache: Cache):
+    def __init__(self, settings: Settings, preset: Preset, cache: Cache):
         super().__init__()
         self.settings = settings
-        self.user_config = user_config
-        self.user_config_is_dirty = False  # ユーザー設定変更フラグ
+        self.preset = preset
+        self.preset_is_dirty = False  # ユーザー設定変更フラグ
         self.cache = cache
         self.setWindowTitle(PROGRAM_TITLE)
         self.resize(1100, 700)
@@ -69,7 +69,7 @@ class MainWindow(QMainWindow):
         valid_chars_layout = QHBoxLayout()
         valid_chars_label = QLabel("ValidNameChars:")
         self.valid_chars_edit = QLineEdit()  # 1行入力欄
-        self.valid_chars_edit.setText(self.user_config.valid_name_chars)
+        self.valid_chars_edit.setText(self.preset.valid_name_chars)
         self.valid_chars_edit.setPlaceholderText("$-_0123456789...")
         self.valid_chars_edit.textChanged.connect(self.on_valid_chars_changed)
 
@@ -112,10 +112,10 @@ class MainWindow(QMainWindow):
             sys.exit(1)
 
         # 2. キャッシュからデータを読み込んでUIに反映する（スキャンはしない）
-        if self.user_config.swf_dir and self.user_config.swf_dir.exists():
+        if self.preset.swf_dir and self.preset.swf_dir.exists():
             print("キャッシュからフォントリストを読み込みます...")
             self.refresh_ui_from_cache()
-            self.path_label.setText(f"現在のフォルダ: {self.user_config.swf_dir}")
+            self.path_label.setText(f"現在のフォルダ: {self.preset.swf_dir}")
         else:
             self.path_label.setText("SWFフォルダが未設定です。選択して下さい。")
 
@@ -136,7 +136,7 @@ class MainWindow(QMainWindow):
         folder_layout = QHBoxLayout()
 
         # パスの表示ラベル
-        path = str(self.user_config.swf_dir) if self.user_config.swf_dir else "未選択"
+        path = str(self.preset.swf_dir) if self.preset.swf_dir else "未選択"
         self.path_label = QLabel(f"現在のフォルダ: {path}")
 
         # フォルダ選択ボタン
@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
         # 再スキャンという名前をやめて、フォントを読み込むという名前にすれば、一覧が空なら押してくれるはず。
         self.btn_rescan = QPushButton("フォントを読み込む")
         self.btn_rescan.clicked.connect(self.on_rescan_clicked)
-        self.btn_rescan.setEnabled(bool(self.user_config.swf_dir))
+        self.btn_rescan.setEnabled(bool(self.preset.swf_dir))
 
         # レイアウトへの追加順序（左からラベル、開く、フォントを読み込む）
         folder_layout.addWidget(self.path_label, stretch=1)
@@ -187,8 +187,7 @@ class MainWindow(QMainWindow):
         self.preset_combo.blockSignals(True)
         self.preset_combo.clear()
 
-        # ここを修正: config_path -> user_config_path
-        current_name = self.user_config.preset_path.stem
+        current_name = self.preset.preset_path.stem
 
         presets = sorted(list(PRESETS_DIR.glob("*.yml")))
         for p in presets:
@@ -198,13 +197,13 @@ class MainWindow(QMainWindow):
         self.preset_combo.blockSignals(False)
 
     def refresh_ui_from_config(self):
-        """現在の self.user_config の内容を UI（各コンボボックス等）に再反映させる"""
+        """現在の self.preset の内容を UI（各コンボボックス等）に再反映させる"""
         # ValidNameCharsを更新
-        self.valid_chars_edit.setText(self.user_config.valid_name_chars)
+        self.valid_chars_edit.setText(self.preset.valid_name_chars)
 
         # 各フォントマッピングのコンボボックスを更新
         for map_name, combo in self.combos.items():
-            font_name = self.user_config.get_mapping_font(map_name)
+            font_name = self.preset.get_mapping_font(map_name)
             combo.blockSignals(True)
             # もし現在のリストにないフォント名なら追加して選択
             if font_name and combo.findText(font_name) == -1:
@@ -213,7 +212,7 @@ class MainWindow(QMainWindow):
             combo.blockSignals(False)
 
         # 未保存フラグをリセット
-        self.user_config_is_dirty = False
+        self.preset_is_dirty = False
         self.setWindowTitle(PROGRAM_TITLE)
 
     def setup_left_panel(self, layout):
@@ -281,7 +280,7 @@ class MainWindow(QMainWindow):
             if group == "custom":
                 info_label = QLabel(
                     "独自に追加されたマップです。<br>"
-                    "ユーザー設定ファイル(user_config.yml)の mappings に、base_group: custom で登録することで表示されます。"
+                    "プリセットファイル(presets\プリセット名.yml)の mappings に、base_group: custom で追加登録することで表示されます。"
                 )
                 info_label.setStyleSheet(normal_infolabel_style)
                 info_label.setWordWrap(True)
@@ -302,7 +301,7 @@ class MainWindow(QMainWindow):
             tab_layout = QFormLayout(form_widget)
 
             group_mappings = [
-                m for m in self.user_config.mappings if m["base_group"] == group
+                m for m in self.preset.mappings if m["base_group"] == group
             ]
             for m in group_mappings:
                 map_name = m["map_name"]
@@ -374,7 +373,7 @@ class MainWindow(QMainWindow):
 
         font_name = selected_item.text()
         group_mappings = [
-            m for m in self.user_config.mappings if m["base_group"] == group_name
+            m for m in self.preset.mappings if m["base_group"] == group_name
         ]
 
         for m in group_mappings:
@@ -382,12 +381,12 @@ class MainWindow(QMainWindow):
 
     def refresh_ui_from_cache(self):
         """スキャンを行わず、現在のフォルダ配下のキャッシュデータのみをUIに反映する"""
-        if not self.user_config.swf_dir:
+        if not self.preset.swf_dir:
             self.font_list_widget.clear()
             return
 
         # 比較用に Path オブジェクト化
-        current_swf_dir = Path(self.user_config.swf_dir).resolve()
+        current_swf_dir = Path(self.preset.swf_dir).resolve()
 
         detected = set()
         for entry in self.cache.data:
@@ -418,8 +417,8 @@ class MainWindow(QMainWindow):
     # --- 新設：再スキャンボタンのアクション ---
     def on_rescan_clicked(self):
         """明示的にスキャンを実行する"""
-        if self.user_config.swf_dir and self.user_config.swf_dir.exists():
-            self.refresh_fonts(self.user_config.swf_dir)
+        if self.preset.swf_dir and self.preset.swf_dir.exists():
+            self.refresh_fonts(self.preset.swf_dir)
             QMessageBox.information(self, "完了", "フォントの読み込みが完了しました。")
         else:
             QMessageBox.warning(self, "エラー", "フォルダが見つかりません。")
@@ -431,11 +430,11 @@ class MainWindow(QMainWindow):
         )
         if dir_path:
             p = Path(dir_path)
-            self.user_config.swf_dir = p
+            self.preset.swf_dir = p
             self.path_label.setText(f"現在のフォルダ: {str(p)}")
             self.btn_rescan.setEnabled(True)  # ボタンを有効化
             self.refresh_fonts(p)
-            self.user_config.save()
+            self.preset.save()
 
     def refresh_fonts(self, swf_dir_path: Path):
         if not self.check_environment():
@@ -495,7 +494,7 @@ class MainWindow(QMainWindow):
         """コンボボックスの中身を更新する"""
         for map_name, combo in self.combos.items():
             # 現在 YAML に保存されている値を取得
-            current_val = self.user_config.get_mapping_font(map_name)
+            current_val = self.preset.get_mapping_font(map_name)
 
             combo.blockSignals(True)
             combo.clear()
@@ -545,8 +544,8 @@ class MainWindow(QMainWindow):
                     return
 
             # 保存して切り替え
-            self.user_config.preset_path = new_path
-            self.user_config.save()
+            self.preset.preset_path = new_path
+            self.preset.save()
 
             # 設定クラスの属性に保存 (プロパティ経由を想定)
             self.settings.last_preset_path = str(new_path)
@@ -567,11 +566,11 @@ class MainWindow(QMainWindow):
 
         # 現在のパスと同じなら何もしない
         new_path = PRESETS_DIR / f"{preset_name}.yml"
-        if self.user_config.preset_path == new_path:
+        if self.preset.preset_path == new_path:
             return
 
         # 切り替え前に保存確認
-        if self.user_config_is_dirty:
+        if self.preset_is_dirty:
             reply = QMessageBox.question(
                 self,
                 "保存の確認",
@@ -583,13 +582,13 @@ class MainWindow(QMainWindow):
             elif reply == QMessageBox.Cancel:
                 # 選択を元に戻す（再帰呼び出しを防ぐため一時的に遮断）
                 self.preset_combo.blockSignals(True)
-                self.preset_combo.setCurrentText(self.user_config.preset_path.stem)
+                self.preset_combo.setCurrentText(self.preset.preset_path.stem)
                 self.preset_combo.blockSignals(False)
                 return
 
         if new_path.exists():
-            self.user_config.preset_path = new_path
-            self.user_config.load()
+            self.preset.preset_path = new_path
+            self.preset.load()
 
             # settings.settings ではなくインスタンス属性に合わせる
             self.settings.last_preset_path = str(new_path)
@@ -604,12 +603,12 @@ class MainWindow(QMainWindow):
         if font_name == "" or font_name is None:
             return
         new_font = "" if font_name == "-- 選択なし --" else font_name
-        for m in self.user_config.mappings:
+        for m in self.preset.mappings:
             if m["map_name"] == map_name:
                 # 値が本当に変わった時だけ Dirty フラグを立てる
                 if m["font_name"] != new_font:
                     m["font_name"] = new_font
-                    self.user_config_is_dirty = True
+                    self.preset_is_dirty = True
                     # タイトルに * をつけて「未保存」を視覚化
                     self.setWindowTitle(f"{PROGRAM_TITLE} *")
                 break
@@ -617,16 +616,16 @@ class MainWindow(QMainWindow):
 
     def on_valid_chars_changed(self, text):
         """文字セットが変更されたらフラグを立てる"""
-        if self.user_config.valid_name_chars != text:
-            self.user_config.valid_name_chars = text
-            self.user_config_is_dirty = True
+        if self.preset.valid_name_chars != text:
+            self.preset.valid_name_chars = text
+            self.preset_is_dirty = True
             self.setWindowTitle(f"{PROGRAM_TITLE} *")
 
     def on_generate_clicked(self):
         try:
             # --- 0. バリデーション：必須項目チェック ---
             missing_fields = []
-            for m in self.user_config.mappings:
+            for m in self.preset.mappings:
                 # flag に 'require' が設定されている、かつフォント名が空（または "-- 選択なし --"）
                 if m.get("flag") == "require" and (
                     not m.get("font_name") or m.get("font_name") == ""
@@ -652,7 +651,7 @@ class MainWindow(QMainWindow):
             }
 
             not_found_in_list = []
-            for m in self.user_config.mappings:
+            for m in self.preset.mappings:
                 f_name = m.get("font_name")
                 # 設定されているのに、今のフォルダのスキャン結果に含まれていない場合
                 if f_name and f_name not in available_fonts:
@@ -683,9 +682,7 @@ class MainWindow(QMainWindow):
 
             # --- 1. 出力先フォルダの決定 ---
             # 前回の設定があればそれを、なければ現在のディレクトリ（"."）を初期値にする
-            initial_dir = (
-                str(self.user_config.output_dir) if self.user_config.output_dir else "."
-            )
+            initial_dir = str(self.preset.output_dir) if self.preset.output_dir else "."
 
             selected_dir = QFileDialog.getExistingDirectory(
                 self,
@@ -699,11 +696,11 @@ class MainWindow(QMainWindow):
                 return
 
             # 新しいパスを保存（次回のために更新）
-            self.user_config.output_dir = Path(selected_dir)
-            self.user_config.save()
+            self.preset.output_dir = Path(selected_dir)
+            self.preset.save()
 
             # --- 2. 生成処理実行 ---
-            out_file = preset_generator(self.user_config, self.cache.data)
+            out_file = preset_generator(self.preset, self.cache.data)
 
             # --- 3. 完了通知 ---
             print(f"✅ 生成成功: {out_file}")
@@ -731,7 +728,7 @@ class MainWindow(QMainWindow):
     def save_current_preset(self):
         """現在のメモリ上の設定をファイルに書き出す"""
         # 必須項目が一つも埋まっていない、などの極端な状態なら警告
-        filled_count = sum(1 for m in self.user_config.mappings if m.get("font_name"))
+        filled_count = sum(1 for m in self.preset.mappings if m.get("font_name"))
         if filled_count == 0:
             reply = QMessageBox.warning(
                 self,
@@ -742,8 +739,8 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.No:
                 return
         try:
-            self.user_config.save()
-            self.user_config_is_dirty = False
+            self.preset.save()
+            self.preset_is_dirty = False
             # タイトルの * を消す
             self.setWindowTitle(PROGRAM_TITLE)
             print("✅ ユーザープリセットを保存しました。")
@@ -755,7 +752,7 @@ class MainWindow(QMainWindow):
         """閉じる時の保存確認"""
         from PySide6.QtWidgets import QMessageBox  # ここでインポートしてもOK
 
-        if self.user_config_is_dirty:
+        if self.preset_is_dirty:
             reply = QMessageBox.question(
                 self,
                 "保存の確認",
