@@ -419,7 +419,7 @@ class MainWindow(QMainWindow):
         """明示的にスキャンを実行する"""
         if self.preset.swf_dir and self.preset.swf_dir.exists():
             self.refresh_fonts(self.preset.swf_dir)
-            QMessageBox.information(self, "完了", "フォントの読み込みが完了しました。")
+            # QMessageBox.information(self, "完了", "フォントの読み込みが完了しました。")
         else:
             QMessageBox.warning(self, "エラー", "フォルダが見つかりません。")
 
