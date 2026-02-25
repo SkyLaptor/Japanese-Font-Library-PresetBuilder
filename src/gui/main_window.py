@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from const import BASE_GROUP, PRESETS_DIR, PROGRAM_TITLE
+from const import ALLOW_MAPPING_CATEGORY, MAIN_WINDOW_TITLE, PRESETS_DIR
 from models.cache import Cache
 from models.preset import Preset
 from models.settings import Settings
@@ -44,7 +44,7 @@ class MainWindow(QMainWindow):
         self.preset_is_dirty = False
 
         # ウィンドウ
-        self.setWindowTitle(PROGRAM_TITLE)
+        self.setWindowTitle(MAIN_WINDOW_TITLE)
         self.resize(1100, 700)
         widget_main = QWidget()
         self.setCentralWidget(widget_main)
@@ -195,7 +195,7 @@ class MainWindow(QMainWindow):
                 # SWF内にフォント名が1つでも入っていれば
                 if font_names:
                     # キャッシュに記録する。このキャッシュはSWFファイルとフォント名の逆引きにも使うから大事にしてね。
-                    self.cache.update_swf_cache(
+                    self.cache.update_cache(
                         swf_path=swf_path, font_names=font_names, swf_dir=swf_dir_path
                     )
 
@@ -261,11 +261,11 @@ class MainWindow(QMainWindow):
     def refresh_ui_from_config(self):
         """現在の self.preset の内容を UI（各コンボボックス等）に再反映させる"""
         # ValidNameCharsを更新
-        self.lineedit_validnamechars.setText(self.preset.valid_name_chars)
+        self.lineedit_validnamechars.setText(self.preset.validnamechars)
 
         # 各フォントマッピングのコンボボックスを更新
         for map_name, combo in self.combos.items():
-            font_name = self.preset.get_mapping_font(map_name)
+            font_name = self.preset.get_mapping_font_name(map_name)
             combo.blockSignals(True)
             # もし現在のリストにないフォント名なら追加して選択
             if font_name and combo.findText(font_name) == -1:
@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
 
         # 未保存フラグをリセット
         self.preset_is_dirty = False
-        self.setWindowTitle(PROGRAM_TITLE)
+        self.setWindowTitle(MAIN_WINDOW_TITLE)
 
     def setup_font_names(self, layout):
         left_group = QGroupBox("フォルダ内に存在するフォント名")
@@ -311,7 +311,7 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.combos = {}
 
-        for group in BASE_GROUP:
+        for group in ALLOW_MAPPING_CATEGORY:
             tab_page = QWidget()
             tab_v_layout = QVBoxLayout(tab_page)  # 一括ボタンを上に置くためVBox
 
@@ -538,7 +538,7 @@ class MainWindow(QMainWindow):
         """コンボボックスの中身を更新する"""
         for map_name, combo in self.combos.items():
             # 現在 YAML に保存されている値を取得
-            current_val = self.preset.get_mapping_font(map_name)
+            current_val = self.preset.get_mapping_font_name(map_name)
 
             combo.blockSignals(True)
             combo.clear()
@@ -596,7 +596,7 @@ class MainWindow(QMainWindow):
             self.preset.save()
 
             # 設定クラスの属性に保存 (プロパティ経由を想定)
-            self.settings.last_preset_name = str(new_preset_name_norm)
+            self.settings.last_preset = str(new_preset_name_norm)
             self.settings.save()
 
             # UIの更新
@@ -639,7 +639,7 @@ class MainWindow(QMainWindow):
             self.preset.load()
 
             # settings.settings ではなくインスタンス属性に合わせる
-            self.settings.last_preset_name = str(new_path)
+            self.settings.last_preset = str(new_path)
             self.settings.save()
 
             self.refresh_ui_from_config()
@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
                     m["font_name"] = new_font
                     self.preset_is_dirty = True
                     # タイトルに * をつけて「未保存」を視覚化
-                    self.setWindowTitle(f"{PROGRAM_TITLE} *")
+                    self.setWindowTitle(f"{MAIN_WINDOW_TITLE} *")
                 break
         # self.config.save() はここでは呼ばない！
 
@@ -668,7 +668,7 @@ class MainWindow(QMainWindow):
 
         label_validnamechars = QLabel("キャラ名に使用できる文字:")
         self.lineedit_validnamechars = QLineEdit()
-        self.lineedit_validnamechars.setText(self.preset.valid_name_chars)
+        self.lineedit_validnamechars.setText(self.preset.validnamechars)
         self.lineedit_validnamechars.textChanged.connect(self.on_validnamechars_changed)
 
         hboxlayout_validnamechars.addWidget(label_validnamechars)
@@ -681,11 +681,11 @@ class MainWindow(QMainWindow):
         """validNameCharsが変更されたときのアクション"""
         # もともとプリセットに記録されている内容から変更されていれば、
         # プリセットの内容を更新した上で変更フラグを立てる。
-        if self.preset.valid_name_chars != text:
-            self.preset.valid_name_chars = text
+        if self.preset.validnamechars != text:
+            self.preset.validnamechars = text
             self.preset_is_dirty = True
             # ウィンドウタイトルに「 *」を付ける事で、「何か変更したよ」というのを視覚的に通知している。
-            self.setWindowTitle(f"{PROGRAM_TITLE} *")
+            self.setWindowTitle(f"{MAIN_WINDOW_TITLE} *")
 
     def on_generate_clicked(self):
         try:
@@ -806,7 +806,7 @@ class MainWindow(QMainWindow):
             self.preset.save()
             self.preset_is_dirty = False
             # タイトルの * を消す
-            self.setWindowTitle(PROGRAM_TITLE)
+            self.setWindowTitle(MAIN_WINDOW_TITLE)
             print("✅ ユーザープリセットを保存しました。")
             # 下部にステータスバーがあればそこに出してもいいですが、とりあえず標準出力
         except Exception as e:

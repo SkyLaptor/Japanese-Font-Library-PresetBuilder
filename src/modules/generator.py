@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from const import FONTCONFIG_ENCODE, INTERFACE_DIR
+from const import SKYRIM_FONTCONFIG_ENCODE, SKYRIM_INTERFACE_DIR_NAME
 from models.cache import Cache
 from models.preset import Preset
 
@@ -11,7 +11,7 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
     # 出力ディレクトリの準備
     out_dir = preset.output_dir
     # Interfaceフォルダ構造を維持して出力
-    interface_out = out_dir / Path(INTERFACE_DIR)
+    interface_out = out_dir / Path(SKYRIM_INTERFACE_DIR_NAME)
     interface_out.mkdir(parents=True, exist_ok=True)
 
     # 必要なSWFをキャッシュから特定
@@ -29,7 +29,7 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
         if any(f in used_fonts for f in font_names):
             # fontconfig.txt に書くパス（Interface/ファイル名）を作成
             swf_name = Path(swf_rel_path).name
-            fontlib_paths.add(f"{str(INTERFACE_DIR)}/{swf_name}")
+            fontlib_paths.add(f"{str(SKYRIM_INTERFACE_DIR_NAME)}/{swf_name}")
             src_file = preset.swf_dir / swf_rel_path
             copy_tasks.append((src_file, swf_name))
 
@@ -54,14 +54,14 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
         lines.append(f"map \"{map_name}\" = \"{font_name}\" {weight}")
 
     # validNameChars セクション
-    lines.append(f"validNameChars \"{preset.valid_name_chars}\"")
+    lines.append(f"validNameChars \"{preset.validnamechars}\"")
 
     # --- 3. fontconfig.txt / fontconfig_ja.txt の保存 ---
     config_file = interface_out / "fontconfig.txt"
-    with open(config_file, "w", encoding=FONTCONFIG_ENCODE) as f:
+    with open(config_file, "w", encoding=SKYRIM_FONTCONFIG_ENCODE) as f:
         f.write("\n".join(lines))
     config_file_ja = interface_out / "fontconfig_ja.txt"
-    with open(config_file_ja, "w", encoding=FONTCONFIG_ENCODE) as f:
+    with open(config_file_ja, "w", encoding=SKYRIM_FONTCONFIG_ENCODE) as f:
         f.write("\n".join(lines))
 
     # --- 4. SWFファイルの物理コピー実行 ---

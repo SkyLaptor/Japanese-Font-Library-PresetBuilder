@@ -1,158 +1,89 @@
-import copy
-from datetime import datetime
 from pathlib import Path
 
 import yaml
 
 from src.const import (
-    DEFAULT_USER_CONFIG,
-    DEFAULT_VALIDNAMECHARS_PATH,
     ENCODE,
-    INTERFACE_DIR,
-    TIME_FORMAT,
+    TEMPLATE_PRESET_FILE,
 )
 
 
 class Preset:
     def __init__(self, preset_path: Path):
         self.preset_path = preset_path
-        # プリセットファイルが存在しない場合はデフォルト値を使用する。
-        self.data = None
-        if not preset_path.exists():
-            print("プリセットファイルが存在しないため、デフォルト値で生成します。")
-            self.data = copy.deepcopy(DEFAULT_USER_CONFIG)
-            # validNameCharsデータが存在自体していなければ、デフォルト値を読み込む。
-            # validNameCharsはとても長いため、定数として設定するのではなく別テキストに分離している。
-            if "valid_name_chars" not in self.data:
-                self.data["valid_name_chars"] = self.load_default_validnamechars()
+        self.load()
+        # 読み込んだ結果、中身が空っぽ（None または {}）だったらテンプレートを読み込んで初期化する
+        if not self.data:
+            print(
+                f"プリセットファイル {self.preset_path} が空または存在しないため、テンプレートを読み込みます。"
+            )
+            with open(TEMPLATE_PRESET_FILE, "r", encoding=ENCODE) as f:
+                self.data = yaml.safe_load(f) or {}
             self.save()
-        else:
-            with open(self.preset_path, "r", encoding=ENCODE) as f:
-                self.data = yaml.safe_load(f)
 
     def load(self):
-        """YAMLファイルから設定を読み込む"""
+        """YAMLファイルからプリセットを読み込み、足りない項目はテンプレートで補完する"""
+        # テンプレートを「ベース」として読み込む
+        try:
+            with open(TEMPLATE_PRESET_FILE, "r", encoding=ENCODE) as f:
+                template_data = yaml.safe_load(f) or {}
+        except Exception as e:
+            template_data = {}  # テンプレート読み込み失敗時の保険
+            print(f"テンプレートの読み込みに失敗しました: {e}")
+
+        # プリセットファイルを読み込む
+        loaded_data = {}
         if self.preset_path.exists():
             try:
                 with open(self.preset_path, "r", encoding=ENCODE) as f:
                     loaded_data = yaml.safe_load(f)
                     if loaded_data:
-                        self.data.update(loaded_data)
+                        # 1.0.0rc2以前のプリセットファイルに対するアップデート処理
+                        if "swf_dir" in loaded_data:
+                            print(
+                                f"swf_dirが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data['swf_dir']}"
+                            )
+                            self.swf_dir = loaded_data.pop("swf_dir")
+                        if "output_dir" in loaded_data:
+                            print(
+                                f"output_dirが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data["output_dir"]}"
+                            )
+                            self.output_dir = loaded_data.pop("output_dir")
+                        if "fontlibs" in loaded_data:
+                            print(
+                                f"fontlibsが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data["fontlibs"]}"
+                            )
+                            self.fontlibs = loaded_data.pop("fontlibs")
+                        if "valid_name_chars" in loaded_data:
+                            print(
+                                "valid_name_charsが存在しています。取り出してvalidnamecharsで入れ直します。"
+                            )
+                            loaded_data["validnamechars"] = loaded_data.pop(
+                                "valid_name_chars"
+                            )
+                        if "mappings" in loaded_data:
+                            for map in loaded_data["mappings"]:
+                                if "swf_path" not in map:
+                                    print(
+                                        f"swf_pathが存在しません。空で追加します。必要に応じて値を投入して下さい。: {map['font_name']}"
+                                    )
+                                    map["swf_path"] = ""
             except Exception as e:
-                print(f"ユーザー設定の読み込みに失敗しました: {e}")
+                print(f"プリセットの読み込みに失敗しました: {e}")
+
+        # テンプレートをロードしたデータで上書きして補完
+        template_data.update(loaded_data)
+        self.data = template_data  # 最終的なデータをセット
 
     def save(self):
-        """現在の設定をYAMLファイルに保存する"""
+        """現在のプリセットをYAMLファイルに保存する"""
         try:
             # 親ディレクトリがなければ作成
             self.preset_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.preset_path, "w", encoding=ENCODE) as f:
                 yaml.dump(self.data, f, allow_unicode=True, sort_keys=False)
         except Exception as e:
-            print(f"ユーザー設定の保存に失敗しました: {e}")
-
-    def load_default_validnamechars(self):
-        """デフォルトのvalidNameCharsを読み込む"""
-        if DEFAULT_VALIDNAMECHARS_PATH.exists():
-            try:
-                return (
-                    # 念のため改行コードなど制御文字を消してから返す
-                    DEFAULT_VALIDNAMECHARS_PATH.read_text(encoding=ENCODE)
-                    .replace("\n", "")
-                    .replace("\r", "")
-                    .replace("\t", "")
-                )
-            except Exception as e:
-                print(f"デフォルトvalidNameCharsファイルの読み込みに失敗: {e}")
-                return ""
-
-    def update_swf_cache(self, swf_path: Path, font_names: list):
-        """解析したフォント名をキャッシュに保存/更新する"""
-        # 保存時は swf_dir からの相対パスにする（環境移行対策）
-        try:
-            rel_path = str(swf_path.relative_to(self.swf_dir))
-        except ValueError:
-            rel_path = str(swf_path)
-
-        # ファイルの更新日時を取得 フォーマットに注意
-        modified_date = datetime.fromtimestamp(swf_path.stat().st_mtime).strftime(
-            TIME_FORMAT
-        )
-
-        # 既存のキャッシュがあれば更新、なければ追加
-        found = False
-        for entry in self.data["cache"]:
-            if entry["swf_path"] == rel_path:
-                entry["modified_date"] = modified_date
-                entry["font_names"] = font_names
-                found = True
-                break
-
-        if not found:
-            self.data["cache"].append(
-                {
-                    "swf_path": rel_path,
-                    "modified_date": modified_date,
-                    "font_names": font_names,
-                    "hash": "",  # 将来用
-                }
-            )
-
-    def get_required_swfs(self):
-        """
-        現在マッピングされているフォントが必要とするSWFパスのリストを返す。
-        """
-        selected_fonts = {m["font_name"] for m in self.mappings if m["font_name"]}
-        required_swfs = set()
-
-        # --- 1. デフォルト必須分 (fonts_core.swf など) ---
-        for lib in self.fontlibs:
-            if lib.get("flag") == "require":
-                # Pathオブジェクトにして as_posix() でスラッシュに統一
-                p = Path(lib["swf_path"])
-                required_swfs.add(p.as_posix())
-
-        # マッピングされたフォントがどのキャッシュ（SWF）に属しているか探す
-        for font in selected_fonts:
-            for entry in self.data.get("cache", []):
-                if font in entry.get("font_names", []):
-                    # SWFパスを fontlib 用の形式で追加
-                    # 慣例的にInterfaceフォルダの中に置く。
-                    swf_name = Path(entry["swf_path"]).name
-                    swf_path = Path(INTERFACE_DIR) / swf_name
-                    required_swfs.add(f"{swf_path}")
-                    break
-
-        return sorted(list(required_swfs))
-
-    # 便利なゲッター/セッター
-    @property
-    def swf_dir(self):
-        path_str = self.data.get("swf_dir", "")
-        # 空文字だったら None を返す（または空のPathを返さないようにする）
-        if not path_str:
-            return None
-        return Path(path_str)
-
-    @swf_dir.setter
-    def swf_dir(self, value: Path):
-        self.data["swf_dir"] = str(value)
-
-    @property
-    def output_dir(self):
-        return Path(self.data["output_dir"])
-
-    @output_dir.setter
-    def output_dir(self, value: Path):
-        self.data["output_dir"] = str(value)
-
-    @property
-    def fontlibs(self):
-        return self.data["fontlibs"]
-
-    @fontlibs.setter
-    def fontlibs(self, value: list):
-        self.data["fontlibs"] = value
+            print(f"プリセットの保存に失敗しました: {e}")
 
     @property
     def mappings(self):
@@ -162,7 +93,14 @@ class Preset:
     def mappings(self, value: list):
         self.data["mappings"] = value
 
-    def get_mapping_font(self, map_name: str) -> str:
+    def get_mapping_swf_path(self, map_name: str) -> str:
+        """指定されたマップ名に対応する現在のSWFフォントパスを取得する"""
+        for m in self.data["mappings"]:
+            if m["map_name"] == map_name:
+                return m.get("swf_path", "")
+        return ""
+
+    def get_mapping_font_name(self, map_name: str) -> str:
         """指定されたマップ名に対応する現在のフォント名を取得する"""
         for m in self.data["mappings"]:
             if m["map_name"] == map_name:
@@ -170,9 +108,9 @@ class Preset:
         return ""
 
     @property
-    def valid_name_chars(self):
-        return self.data["valid_name_chars"]
+    def validnamechars(self):
+        return self.data["validnamechars"]
 
-    @valid_name_chars.setter
-    def valid_name_chars(self, value: str):
-        self.data["valid_name_chars"] = value
+    @validnamechars.setter
+    def validnamechars(self, value: str):
+        self.data["validnamechars"] = value
