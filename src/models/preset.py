@@ -36,44 +36,107 @@ class Preset:
         if self.preset_path.exists():
             try:
                 with open(self.preset_path, "r", encoding=ENCODE) as f:
-                    loaded_data = yaml.safe_load(f)
-                    if loaded_data:
-                        # 1.0.0rc2以前のプリセットファイルに対するアップデート処理
-                        if "swf_dir" in loaded_data:
-                            print(
-                                f"swf_dirが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data['swf_dir']}"
-                            )
-                            self.swf_dir = loaded_data.pop("swf_dir")
-                        if "output_dir" in loaded_data:
-                            print(
-                                f"output_dirが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data["output_dir"]}"
-                            )
-                            self.output_dir = loaded_data.pop("output_dir")
-                        if "fontlibs" in loaded_data:
-                            print(
-                                f"fontlibsが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data["fontlibs"]}"
-                            )
-                            self.fontlibs = loaded_data.pop("fontlibs")
-                        if "valid_name_chars" in loaded_data:
-                            print(
-                                "valid_name_charsが存在しています。取り出してvalidnamecharsで入れ直します。"
-                            )
-                            loaded_data["validnamechars"] = loaded_data.pop(
-                                "valid_name_chars"
-                            )
-                        if "mappings" in loaded_data:
-                            for map in loaded_data["mappings"]:
-                                if "swf_path" not in map:
-                                    print(
-                                        f"swf_pathが存在しません。空で追加します。必要に応じて値を投入して下さい。: {map['font_name']}"
-                                    )
-                                    map["swf_path"] = ""
+                    loaded_data = yaml.safe_load(f) or {}
+                # アップデート処理をインスタンスメソッドへ切り出すため、一時的に保持して呼び出す
+                self._loaded_data = loaded_data
+                if self._loaded_data:
+                    self.migrate_legacy_data()
+                loaded_data = self._loaded_data
+                self.data = loaded_data  # マイグレート後のデータをセット
             except Exception as e:
                 print(f"プリセットの読み込みに失敗しました: {e}")
 
         # テンプレートをロードしたデータで上書きして補完
         template_data.update(loaded_data)
         self.data = template_data  # 最終的なデータをセット
+
+    def _normalize_mappings(self, loaded: dict, template_data: dict):
+        """mappings をテンプレート準拠で補完・正規化する。"""
+        if "mappings" not in loaded or not isinstance(loaded.get("mappings"), list):
+            return
+
+        template_mappings = template_data.get("mappings", []) or []
+        template_by_name = {
+            t.get("map_name"): t for t in template_mappings if isinstance(t, dict)
+        }
+
+        normalized = []
+        for m in loaded["mappings"]:
+            if not isinstance(m, dict):
+                continue
+
+            # 旧キー互換: base_group -> category
+            if "base_group" in m and "category" not in m:
+                m["category"] = m.pop("base_group")
+
+            map_name = m.get("map_name")
+            if map_name in template_by_name:
+                merged = dict(template_by_name[map_name])
+                merged.update(m)
+            else:
+                merged = {
+                    "map_name": map_name or "",
+                    "swf_path": "",
+                    "font_name": "",
+                    "weight": "Normal",
+                    "category": "custom",
+                    "flag": "option",
+                }
+                merged.update(m)
+
+            # 1.0.0rc2+ は swf_path 必須
+            if "swf_path" not in merged:
+                print(
+                    f"swf_pathが存在しません。空で追加します。必要に応じて値を投入して下さい。: {merged.get('font_name', '')}"
+                )
+                merged["swf_path"] = ""
+
+            normalized.append(merged)
+
+        loaded["mappings"] = normalized
+
+    def migrate_legacy_data(self):
+        """バージョンアップに伴う古いプリセットデータのマイグレーション処理"""
+        loaded = getattr(self, "_loaded_data", {}) or {}
+
+        try:
+            with open(TEMPLATE_PRESET_FILE, "r", encoding=ENCODE) as f:
+                template_data = yaml.safe_load(f) or {}
+        except Exception:
+            template_data = {}
+        # 1.0.0rc2以降はsettings.ymlに移行
+        if "swf_dir" in loaded:
+            print(
+                f"swf_dirが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded['swf_dir']}"
+            )
+            self.swf_dir = loaded.pop("swf_dir")
+        # 1.0.0rc2以降はsettings.ymlに移行
+        if "output_dir" in loaded:
+            print(
+                f"output_dirが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded['output_dir']}"
+            )
+            self.output_dir = loaded.pop("output_dir")
+        # 1.0.0rc2以降は不要。そもそも使用されていなかったはず。
+        if "fontlibs" in loaded:
+            print(
+                f"fontlibsが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded['fontlibs']}"
+            )
+            self.fontlibs = loaded.pop("fontlibs")
+        # 1.0.0rc2以降は名前を変更してcategoryに移行
+        if "base_group" in loaded:
+            print("base_groupが存在しています。取り出してcategoryで入れ直します。")
+            loaded["category"] = loaded.pop("base_group")
+        # 1.0.0rc2以降は名前を変更してvalidnamecharsに移行
+        if "valid_name_chars" in loaded:
+            print(
+                "valid_name_charsが存在しています。取り出してvalidnamecharsで入れ直します。"
+            )
+            loaded["validnamechars"] = loaded.pop("valid_name_chars")
+        # mappings はテンプレート準拠で項目補完しつつ正規化する
+        self._normalize_mappings(loaded, template_data)
+
+        # 更新したデータを戻しておく
+        self._loaded_data = loaded
 
     def save(self):
         """現在のプリセットをYAMLファイルに保存する"""
