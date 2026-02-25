@@ -8,7 +8,11 @@ from const import ENCODE, TEMPLATE_SETTINGS_FILE
 class Settings:
     def __init__(self, settings_path: Path):
         self.settings_path = settings_path
+        settings_exists = self.settings_path.exists()
         self.load()
+        if not settings_exists:
+            print("settings.yml が存在しないため、初期値を保存します。")
+            self.save()
         # 読み込んだ結果、中身が空っぽ（None または {}）だったらテンプレートを読み込んで初期化する
         if not self.data:
             print("システム設定が空または存在しないため、テンプレートを読み込みます。")
@@ -31,39 +35,49 @@ class Settings:
         if self.settings_path.exists():
             try:
                 with open(self.settings_path, "r", encoding=ENCODE) as f:
-                    loaded_data = (
-                        yaml.safe_load(f) or {}
-                    )  # ファイルが空の場合は空の辞書を使用
-                    if loaded_data:
-                        # 1.0.0rc2以前のシステム設定ファイルに対するアップデート処理
-                        if "weight_type" in loaded_data:
-                            print(
-                                f"weight_typeが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded_data['weight_type']}"
-                            )
-                            self.weight_type = loaded_data.pop("weight_type")
-                        if "swf_dir" not in loaded_data:
-                            print(
-                                "swf_dirが存在しません。空で追加します。必要に応じて値を投入して下さい。"
-                            )
-                            loaded_data["swf_dir"] = ""
-                        if "output_dir" not in loaded_data:
-                            print(
-                                "output_dirが存在しません。空で追加します。必要に応じて値を投入して下さい。"
-                            )
-                            loaded_data["output_dir"] = ""
-                        if "last_preset_name" in loaded_data:
-                            print(
-                                "last_preset_nameが存在しています。取り出してlast_presetで入れ直します。"
-                            )
-                            loaded_data["last_preset"] = loaded_data.pop(
-                                "last_preset_name"
-                            )
+                    loaded_data = yaml.safe_load(f) or {}
+                # アップデート（移行）処理を分離して実行
+                self._loaded_data = loaded_data
+                if self._loaded_data:
+                    self.migrate_legacy_data()
+                loaded_data = self._loaded_data
+                self.data = loaded_data  # マイグレート後のデータをセット
             except Exception as e:
                 print(f"システム設定の読み込みに失敗しました: {e}")
 
         # テンプレートをロードしたデータで上書きして補完
         template_data.update(loaded_data)
         self.data = template_data  # 最終的なデータをセット
+
+    def migrate_legacy_data(self):
+        """バージョンアップに伴う古いシステム設定データのマイグレーション処理"""
+        loaded = getattr(self, "_loaded_data", {}) or {}
+        # 1.0.0rc2以降は不要。そもそも使用されていなかったはず。
+        if "weight_type" in loaded:
+            print(
+                f"weight_typeが存在しています。取り出して同名で一時保管します。必要に応じて保存して下さい。: {loaded['weight_type']}"
+            )
+            self.weight_type = loaded.pop("weight_type")
+        # 1.0.0rc2以前はpreset.ymlに保持していたが、1.0.0rc2以降はsettings.ymlに移行
+        if "swf_dir" not in loaded:
+            print(
+                "swf_dirが存在しません。空で追加します。必要に応じて値を投入して下さい。"
+            )
+            loaded["swf_dir"] = ""
+        # 1.0.0rc2以前はpreset.ymlに保持していたが、1.0.0rc2以降はsettings.ymlに移行
+        if "output_dir" not in loaded:
+            print(
+                "output_dirが存在しません。空で追加します。必要に応じて値を投入して下さい。"
+            )
+            loaded["output_dir"] = ""
+        # 1.0.0rc2以降は名前を変更してlast_presetに移行
+        if "last_preset_name" in loaded:
+            print(
+                "last_preset_nameが存在しています。取り出してlast_presetで入れ直します。"
+            )
+            loaded["last_preset"] = loaded.pop("last_preset_name")
+        # 更新したデータを戻しておく
+        self._loaded_data = loaded
 
     def save(self):
         """現在のシステム設定をYAMLファイルに保存する"""

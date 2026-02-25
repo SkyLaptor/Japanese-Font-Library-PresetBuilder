@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import yaml
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
@@ -24,12 +25,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from const import ALLOW_MAPPING_CATEGORY, MAIN_WINDOW_TITLE, PRESETS_DIR
+from const import (
+    ALLOW_MAPPING_CATEGORY,
+    CACHE_FILE,
+    ENCODE,
+    MAIN_WINDOW_TITLE,
+    PRESETS_DIR,
+    SETTINGS_FILE,
+)
 from models.cache import Cache
 from models.preset import Preset
 from models.settings import Settings
-from modules.generator import preset_generator
-from modules.swf_parser import swf_parser
+from src.gui.main_controller import MainController
 from src.modules.find_preview_image import find_preview_image
 
 
@@ -39,6 +46,7 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.preset = preset
         self.cache = cache
+        self.controller = MainController(settings=settings, preset=preset, cache=cache)
         # プリセット変更フラグ
         # 何か設定を操作するようなアクションを起こしたらTrueに、プリセットを保存するアクションでFalseにすること！
         self.preset_is_dirty = False
@@ -83,7 +91,7 @@ class MainWindow(QMainWindow):
 
         btn_save_config = QPushButton("現在のユーザープリセット設定を保存")
         btn_save_config.setFixedHeight(45)
-        btn_save_config.clicked.connect(self.save_current_preset)
+        btn_save_config.clicked.connect(self.on_save_current_preset_clicked)
 
         btn_generate = QPushButton("ユーザープリセットを出力")
         btn_generate.setFixedHeight(45)
@@ -106,6 +114,7 @@ class MainWindow(QMainWindow):
         self.window_init()
 
     def window_init(self):
+        # 起動時の重い処理は `run_app()` 側で行うため、ここでは何もしない
         return
 
     def setup_swf_dir_selection(self, layout):
@@ -113,51 +122,51 @@ class MainWindow(QMainWindow):
         hboxlayout_swf_dir = QHBoxLayout()
 
         # SWFフォルダのパス表示ラベル
-        label_swf_dir_path = QLabel()
+        self.label_swf_dir_path = QLabel()
         label_swf_dir_path_prefix = "参照中のSWFフォルダ: "
+        swf_dir = Path(self.settings.swf_dir) if self.settings.swf_dir else None
         # SWFフォルダが設定されていて、かつ存在しているか。
-        if self.preset.swf_dir and self.preset.swf_dir.exists():
+        if swf_dir and swf_dir.exists():
             # resolveしなくても、もともと絶対パスで入ってる。
-            label_swf_dir_path.setText(
-                f"{label_swf_dir_path_prefix}{self.preset.swf_dir}"
-            )
+            self.label_swf_dir_path.setText(f"{label_swf_dir_path_prefix}{swf_dir}")
         else:
-            label_swf_dir_path.setText(f"{label_swf_dir_path_prefix}(未設定)")
+            self.label_swf_dir_path.setText(f"{label_swf_dir_path_prefix}(未設定)")
 
         # SWFフォルダ閲覧ボタン
         button_browse_swf_dir = QPushButton("フォルダを開く")
-        button_browse_swf_dir.clicked.connect(self.button_browse_swf_dir_clicked)
+        button_browse_swf_dir.clicked.connect(self.on_browse_swf_dir_clicked)
 
         # SWFフォルダ読み込みボタン
-        button_load_swf_dir = QPushButton("読み込む")
-        button_load_swf_dir.clicked.connect(self.button_load_swf_dir_clicked)
-        button_load_swf_dir.setEnabled(bool(self.preset.swf_dir))
+        self.button_load_swf_dir = QPushButton("読み込む")
+        self.button_load_swf_dir.clicked.connect(self.on_load_swf_dir_clicked)
+        self.button_load_swf_dir.setEnabled(bool(self.settings.swf_dir))
 
         # レイアウトへ各種部品の挿入
-        hboxlayout_swf_dir.addWidget(label_swf_dir_path, stretch=1)
+        hboxlayout_swf_dir.addWidget(self.label_swf_dir_path, stretch=1)
         hboxlayout_swf_dir.addWidget(button_browse_swf_dir)
-        hboxlayout_swf_dir.addWidget(button_load_swf_dir)
+        hboxlayout_swf_dir.addWidget(self.button_load_swf_dir)
 
         layout.addLayout(hboxlayout_swf_dir)
 
-    def button_browse_swf_dir_clicked(self):
+    def on_browse_swf_dir_clicked(self):
         """SWFフォルダ閲覧ボタン押下時のアクション"""
         dir_path = QFileDialog.getExistingDirectory(
             self, "フォントSWFが含まれるフォルダを選択"
         )
         if dir_path:
             p = Path(dir_path)
-            self.preset.swf_dir = p
-            self.label_swf_dir_path.setText(f"現在のフォルダ: {str(p)}")
+            self.settings.swf_dir = str(p)
+            self.settings.save()
+            self.label_swf_dir_path.setText(f"参照中のSWFフォルダ: {str(p)}")
             self.button_load_swf_dir.setEnabled(True)  # ボタンを有効化
             self.refresh_font_names_list(p)
-            self.preset.save()
 
-    def button_load_swf_dir_clicked(self):
+    def on_load_swf_dir_clicked(self):
         """SWFフォルダ読み込みボタン押下時のアクション"""
         # SWFフォルダが設定されていて、かつ存在しているか。
-        if self.preset.swf_dir and self.preset.swf_dir.exists():
-            self.refresh_font_names_list(self.preset.swf_dir)
+        swf_dir = Path(self.settings.swf_dir) if self.settings.swf_dir else None
+        if swf_dir and swf_dir.exists():
+            self.refresh_font_names_list(swf_dir)
             # QMessageBox.information(self, "完了", "フォルダの内容を読み込みました。")
         else:
             QMessageBox.warning(self, "エラー", "フォルダが見つかりません。")
@@ -177,46 +186,19 @@ class MainWindow(QMainWindow):
         QGuiApplication.processEvents()
 
         try:
-            # フォント名一覧
-            # この中に{"font_name": "apricot_every", "swf_path": "apricot/fonts_apricot_every.swf"} といった感じでずらずら入る予定
-            font_names_list = []
-            # フォント名一覧部品もリセット
+            # コントローラに実際のスキャン処理を委譲
+            font_list = self.controller.scan_swf_directory(swf_dir_path, debug=False)
+
+            # UI の更新はここで行う
             self.list_widget_font_names.clear()
-
-            # SWFフォルダ内のSWFファイルを再帰的に検査していく。
-            for swf_path in swf_dir_path.rglob("*.swf"):
-                # SWFパーサーを使用して、フォントSWF内にあるフォント名を取得（1SWFに0～Xのフォント名が格納されている。）
-                font_names = swf_parser(
-                    swf_path=swf_path,
-                    cache=self.cache.data,  # キャッシュ情報を渡して高速化
-                    debug=False,
-                )
-
-                # SWF内にフォント名が1つでも入っていれば
-                if font_names:
-                    # キャッシュに記録する。このキャッシュはSWFファイルとフォント名の逆引きにも使うから大事にしてね。
-                    self.cache.update_cache(
-                        swf_path=swf_path, font_names=font_names, swf_dir=swf_dir_path
-                    )
-
-                    for font_name in font_names:
-                        # 例 {"font_name": "apricot_every", "swf_path": "apricot/fonts_apricot_every.swf"}
-                        font_names_list.append(
-                            {"font_name": font_name, "swf_path": swf_path}
-                        )
-
-            # フォント名一覧部品に読み込んだフォント名一覧を綺麗に並び替えて投入
-            sorted_font_names_list = sorted(list(font_names_list))
-            self.list_widget_font_names.addItems(sorted_font_names_list)
-            # TODO: これ何してるのか
-            self.update_combos_with_detected(sorted_font_names_list)
+            self.list_widget_font_names.addItems(font_list)
+            self.update_combos_with_detected(font_list)
 
         except Exception as e:
             msg = "フォント名一覧の更新中にエラーが発生しました:"
             print(f"{msg} {e}")
             QMessageBox.critical(self, "エラー", f"{msg}\n{e}")
         finally:
-            # 何があろうとも一覧更新処理中ダイアログを閉じる。
             progress.close()
 
     def setup_preset_selection(self, layout):
@@ -285,7 +267,7 @@ class MainWindow(QMainWindow):
         self.list_widget_font_names = QListWidget()
         # 項目が選択されたらプレビューを更新するシグナルを接続
         self.list_widget_font_names.itemSelectionChanged.connect(
-            self.update_font_preview
+            self.on_font_selection_changed
         )
         left_layout.addWidget(self.list_widget_font_names, stretch=2)
 
@@ -362,7 +344,7 @@ class MainWindow(QMainWindow):
             if group == "custom":
                 info_label = QLabel(
                     "独自に追加されたマップです。<br>"
-                    "プリセットファイル(presets\プリセット名.yml)の mappings に、base_group: custom で追加登録することで表示されます。"
+                    "プリセットファイル(presets\プリセット名.yml)の mappings に、category: custom で追加登録することで表示されます。"
                 )
                 info_label.setStyleSheet(normal_infolabel_style)
                 info_label.setWordWrap(True)
@@ -374,7 +356,7 @@ class MainWindow(QMainWindow):
                 f"左のリストで選択中のフォントを {group} 全体に適用"
             )
             btn_apply_all.clicked.connect(
-                lambda _, g=group: self.apply_font_to_group(g)
+                lambda _, g=group: self.on_apply_font_to_group(g)
             )
             tab_v_layout.addWidget(btn_apply_all)
 
@@ -382,9 +364,7 @@ class MainWindow(QMainWindow):
             form_widget = QWidget()
             tab_layout = QFormLayout(form_widget)
 
-            group_mappings = [
-                m for m in self.preset.mappings if m["base_group"] == group
-            ]
+            group_mappings = [m for m in self.preset.mappings if m["category"] == group]
             for m in group_mappings:
                 map_name = m["map_name"]
 
@@ -396,7 +376,7 @@ class MainWindow(QMainWindow):
                 btn_apply.setFixedWidth(35)  # さらにコンパクトに
                 btn_apply.setToolTip("選択中のフォントをここに適用")
                 btn_apply.clicked.connect(
-                    lambda _, n=map_name: self.apply_selected_to_row(n)
+                    lambda _, n=map_name: self.on_apply_selected_to_row(n)
                 )
 
                 # 2. マップ名ラベル
@@ -431,7 +411,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(right_group, stretch=2)
 
     # --- アクション用メソッド ---
-    def apply_selected_to_row(self, map_name: str):
+    def on_apply_selected_to_row(self, map_name: str):
         """左のリストで選択されているフォント名を、指定した行のコンボボックスにセットする"""
         selected_item = self.list_widget_font_names.currentItem()
         if selected_item:
@@ -447,7 +427,7 @@ class MainWindow(QMainWindow):
                     combo.addItem(font_name, font_name)
                     combo.setCurrentText(font_name)
 
-    def apply_font_to_group(self, group_name: str):
+    def on_apply_font_to_group(self, group_name: str):
         """左のリストで選択されているフォント名を、グループ内の全ての行に適用する"""
         selected_item = self.list_widget_font_names.currentItem()
         if not selected_item:
@@ -455,20 +435,20 @@ class MainWindow(QMainWindow):
 
         font_name = selected_item.text()
         group_mappings = [
-            m for m in self.preset.mappings if m["base_group"] == group_name
+            m for m in self.preset.mappings if m["category"] == group_name
         ]
 
         for m in group_mappings:
-            self.apply_selected_to_row(m["map_name"])
+            self.on_apply_selected_to_row(m["map_name"])
 
     def refresh_ui_from_cache(self):
         """スキャンを行わず、現在のフォルダ配下のキャッシュデータのみをUIに反映する"""
-        if not self.preset.swf_dir:
+        if not self.settings.swf_dir:
             self.list_widget_font_names.clear()
             return
 
         # 比較用に Path オブジェクト化
-        current_swf_dir = Path(self.preset.swf_dir).resolve()
+        current_swf_dir = Path(self.settings.swf_dir).resolve()
 
         detected = set()
         for entry in self.cache.data:
@@ -496,7 +476,7 @@ class MainWindow(QMainWindow):
         self.list_widget_font_names.addItems(sorted_fonts)
         self.update_combos_with_detected(sorted_fonts)
 
-    def update_font_preview(self):
+    def on_font_selection_changed(self):
         """リストで選択されたフォントのプレビュー画像を表示する"""
         selected_item = self.list_widget_font_names.currentItem()
         if not selected_item:
@@ -508,10 +488,14 @@ class MainWindow(QMainWindow):
 
         # 1. キャッシュからこのフォント名を持つ SWF パスを探す
         found_swf_path = None
+        swf_dir = Path(self.settings.swf_dir) if self.settings.swf_dir else None
+        if not swf_dir:
+            self.preview_label.setText("SWF dir not set")
+            return
         for entry in self.cache.data:
             if font_name in entry.get("font_names", []):
                 # 保存されている相対パスを絶対パスに戻す
-                found_swf_path = self.preset.swf_dir / entry["swf_path"]
+                found_swf_path = swf_dir / entry["swf_path"]
                 break
 
         if not found_swf_path:
@@ -626,7 +610,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             )
             if reply == QMessageBox.Yes:
-                self.save_current_preset()
+                self.on_save_current_preset_clicked()
             elif reply == QMessageBox.Cancel:
                 # 選択を元に戻す（再帰呼び出しを防ぐため一時的に遮断）
                 self.preset_combo.blockSignals(True)
@@ -688,108 +672,73 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"{MAIN_WINDOW_TITLE} *")
 
     def on_generate_clicked(self):
-        try:
-            # --- 0. バリデーション：必須項目チェック ---
-            missing_fields = []
-            for m in self.preset.mappings:
-                # flag に 'require' が設定されている、かつフォント名が空（または "-- 選択なし --"）
-                if m.get("flag") == "require" and (
-                    not m.get("font_name") or m.get("font_name") == ""
-                ):
-                    # 分かりやすいようにマップ名（または表示名）をリストに追加
-                    missing_fields.append(f"・{m['map_name']}")
-
-            if missing_fields:
-                error_msg = "以下の必須項目が設定されていません。フォントを選択してください：\n\n" + "\n".join(
-                    missing_fields
-                )
-                QMessageBox.warning(self, "入力チェック", error_msg)
-
-                # 該当する項目があるタブに自動で切り替える、なんていう「おせっかい機能」も可能ですが
-                # まずは警告を出して止めるのが一番安全です。
-                return
-
-            # --- 0.5 バリデーション：フォントの存在チェック ---
-            # 現在のリスト(UI)に表示されているフォントをセットにする
-            available_fonts = {
-                self.list_widget_font_names.item(i).text()
-                for i in range(self.list_widget_font_names.count())
-            }
-
-            not_found_in_list = []
-            for m in self.preset.mappings:
-                f_name = m.get("font_name")
-                # 設定されているのに、今のフォルダのスキャン結果に含まれていない場合
-                if f_name and f_name not in available_fonts:
-                    not_found_in_list.append(f"・{m['map_name']}: {f_name}")
-
-            if not_found_in_list:
-                # コンソールに警告を出す
-                print(
-                    "\n⚠️ [WARNING] 設定されたフォントが現在のフォルダ内に見つかりません:"
-                )
-                for item in not_found_in_list:
-                    print(f"  {item}")
-
-                warning_msg = (
-                    "以下の設定済みフォントマップにて、紐づくフォントSWFが存在しません。\n"
-                    "そのまま出力しますか？（UI全体が豆腐化する可能性があります）\n\n"
-                    + "\n".join(not_found_in_list)
-                )
-                reply = QMessageBox.warning(
-                    self,
-                    "フォント未検出",
-                    warning_msg,
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
-                )
-                if reply == QMessageBox.No:
-                    return
-
-            # --- 1. 出力先フォルダの決定 ---
-            # 前回の設定があればそれを、なければ現在のディレクトリ（"."）を初期値にする
-            initial_dir = str(self.preset.output_dir) if self.preset.output_dir else "."
-
-            selected_dir = QFileDialog.getExistingDirectory(
-                self,
-                "ユーザープリセットの出力先フォルダを選択してください",
-                initial_dir,
+        # バリデーション（必須項目）
+        missing = self.controller.validate_required_mappings()
+        if missing:
+            error_msg = (
+                "以下の必須項目が設定されていません。フォントを選択してください：\n\n"
+                + "\n".join([f"・{m}" for m in missing])
             )
+            QMessageBox.warning(self, "入力チェック", error_msg)
+            return
 
-            # キャンセルされたら処理を中断
-            if not selected_dir:
-                print("出力がキャンセルされました。")
+        # バリデーション（現在のフォント一覧に存在するか）
+        available_fonts = {
+            self.list_widget_font_names.item(i).text()
+            for i in range(self.list_widget_font_names.count())
+        }
+        not_found = self.controller.find_missing_fonts(available_fonts)
+        if not_found:
+            print("\n⚠️ [WARNING] 設定されたフォントが現在のフォルダ内に見つかりません:")
+            for map_name, f in not_found:
+                print(f"  ・{map_name}: {f}")
+            warning_msg = (
+                "以下の設定済みフォントマップにて、紐づくフォントSWFが存在しません。\n"
+                "そのまま出力しますか？（UI全体が豆腐化する可能性があります）\n\n"
+                + "\n".join([f"・{m}: {n}" for m, n in not_found])
+            )
+            reply = QMessageBox.warning(
+                self,
+                "フォント未検出",
+                warning_msg,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply == QMessageBox.No:
                 return
 
-            # 新しいパスを保存（次回のために更新）
-            self.preset.output_dir = Path(selected_dir)
-            self.preset.save()
+        # 出力先選択
+        initial_dir = str(self.settings.output_dir) if self.settings.output_dir else "."
+        selected_dir = QFileDialog.getExistingDirectory(
+            self,
+            "ユーザープリセットの出力先フォルダを選択してください",
+            initial_dir,
+        )
+        if not selected_dir:
+            print("出力がキャンセルされました。")
+            return
 
-            # --- 2. 生成処理実行 ---
-            out_file = preset_generator(self.preset, self.cache.data)
+        self.settings.output_dir = selected_dir
+        self.settings.save()
 
-            # --- 3. 完了通知 ---
+        # 実行はコントローラに委譲
+        try:
+            out_file = self.controller.generate_preset(Path(selected_dir))
             print(f"✅ 生成成功: {out_file}")
-
-            # せっかくなので、保存先をすぐ確認できるように「フォルダを開く」ボタン付きのボックスにしましょう
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("完了")
             msg_box.setText(f"生成が完了しました！\n\n出力先:\n{out_file.parent}")
             msg_box.setIcon(QMessageBox.Information)
             open_folder_btn = msg_box.addButton("出力先を開く", QMessageBox.ActionRole)
             msg_box.addButton("閉じる", QMessageBox.AcceptRole)
-
             msg_box.exec()
-
-            # 「出力先を開く」が押されたらエクスプローラーで開く
             if msg_box.clickedButton() == open_folder_btn:
                 os.startfile(out_file.parent)
-
         except Exception as e:
             print(f"❌ 生成失敗: {e}")
             QMessageBox.critical(self, "エラー", f"生成中にエラーが発生しました:\n{e}")
 
-    def save_current_preset(self):
+    def on_save_current_preset_clicked(self):
         """現在のメモリ上の設定をファイルに書き出す"""
         # 必須項目が一つも埋まっていない、などの極端な状態なら警告
         filled_count = sum(1 for m in self.preset.mappings if m.get("font_name"))
@@ -803,12 +752,11 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.No:
                 return
         try:
-            self.preset.save()
+            self.controller.save_preset()
             self.preset_is_dirty = False
             # タイトルの * を消す
             self.setWindowTitle(MAIN_WINDOW_TITLE)
             print("✅ ユーザープリセットを保存しました。")
-            # 下部にステータスバーがあればそこに出してもいいですが、とりあえず標準出力
         except Exception as e:
             QMessageBox.critical(self, "保存エラー", f"設定の保存に失敗しました:\n{e}")
 
@@ -825,7 +773,7 @@ class MainWindow(QMainWindow):
             )
 
             if reply == QMessageBox.Yes:
-                self.save_current_preset()
+                self.on_save_current_preset_clicked()
                 event.accept()
             elif reply == QMessageBox.No:
                 event.accept()
@@ -846,3 +794,112 @@ class MainWindow(QMainWindow):
         #     return False
         # もしほかにチェックを挟みたくなった時用にのこしておく。
         return True
+
+
+def run_app(app=None):
+    """アプリケーションを起動するユーティリティ。
+
+    `main.py` から起動処理を委譲するために、設定・プリセット・キャッシュの読み込み
+    とウィンドウ生成をここで行う。
+    """
+    from pathlib import Path
+
+    if app is None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication([])
+
+    # 1. システム設定を読み込み
+    settings = Settings(Path(SETTINGS_FILE))
+    settings.load()
+
+    # 手順1: Settings の健全化 — 欠けている設定をプリセットの生データから吸い上げる
+    try:
+        updated = False
+        if PRESETS_DIR.exists():
+            for pfile in PRESETS_DIR.glob("*.yml"):
+                try:
+                    with open(pfile, "r", encoding=ENCODE) as f:
+                        pdata = yaml.safe_load(f) or {}
+                    # 例: 共通の swf_dir, output_dir が settings に存在しなければ吸い上げる
+                    if not settings.swf_dir and pdata.get("swf_dir"):
+                        settings.swf_dir = pdata.get("swf_dir")
+                        updated = True
+                    if not settings.output_dir and pdata.get("output_dir"):
+                        settings.output_dir = pdata.get("output_dir")
+                        updated = True
+                    # mappings 内の swf_path / output_path を参照して設定へ吸い上げ
+                    if "mappings" in pdata:
+                        for m in pdata.get("mappings", []):
+                            try:
+                                # swf_path は相対パスであることが多いが、もしパス区切りを含む場合は親ディレクトリを採用
+                                sp = m.get("swf_path")
+                                if sp and not settings.swf_dir:
+                                    sp_str = str(sp)
+                                    if (
+                                        ("/" in sp_str)
+                                        or ("\\" in sp_str)
+                                        or Path(sp_str).is_absolute()
+                                    ):
+                                        settings.swf_dir = str(Path(sp_str).parent)
+                                        updated = True
+                                        # 一度見つかれば十分
+                                        break
+                                op = m.get("output_path")
+                                if op and not settings.output_dir:
+                                    settings.output_dir = op
+                                    updated = True
+                                    break
+                            except Exception:
+                                # 走査中の個別エラーは無視して次へ
+                                continue
+                    if updated:
+                        print(f"settings に値を吸い上げました: {pfile}")
+                        # もし十分な値が見つかれば早期終了して保存しても良い
+                        # ただしここでは全ファイルを走査して可能な限り吸い上げる
+                except Exception as e:
+                    print(f"プリセット読み込み中にエラー: {pfile}: {e}")
+        if updated:
+            try:
+                settings.save()
+                print("Settings を更新して保存しました。")
+            except Exception as e:
+                print(f"Settings の保存に失敗しました: {e}")
+    except Exception as e:
+        print(f"Settings 健全化中にエラーが発生しました: {e}")
+
+    # 手順2: Presets の一括マイグレート（テンプレート補完等）
+    try:
+        if PRESETS_DIR.exists():
+            print("全プリセットをマイグレートします...")
+            for pfile in PRESETS_DIR.glob("*.yml"):
+                try:
+                    print(f"マイグレート中: {pfile}")
+                    pr = Preset(pfile)
+                    pr.load()
+                    pr.save()
+                except Exception as e:
+                    print(f"プリセットのマイグレートに失敗しました: {pfile}: {e}")
+            print("プリセットのマイグレートが完了しました。")
+    except Exception as e:
+        print(f"プリセット一括マイグレート中にエラーが発生しました: {e}")
+
+    # 2. どのプリセットを使うか決定
+    last_preset_name = settings.last_preset
+    candidate_path = None
+    if last_preset_name:
+        candidate_path = PRESETS_DIR / last_preset_name
+    if candidate_path is not None and candidate_path.exists():
+        preset_path = candidate_path
+    else:
+        preset_path = Path(PRESETS_DIR) / "default.yml"
+
+    # 3. プリセットとキャッシュを読み込み
+    preset = Preset(preset_path)
+    cache = Cache(Path(CACHE_FILE))
+
+    # 4. ウィンドウを生成して表示
+    window = MainWindow(settings=settings, preset=preset, cache=cache)
+    window.show()
+
+    return app.exec()

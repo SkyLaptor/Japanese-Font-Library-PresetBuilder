@@ -54,3 +54,24 @@ def test_property_setters_getters_and_save(tmp_path):
     new = yaml.safe_load(preset_file.read_text(encoding="utf-8"))
     assert new["mappings"][0]["map_name"] == "x"
     assert new["validnamechars"] == "z"
+
+
+def test_mappings_base_group_is_migrated_to_category(tmp_path):
+    preset_file = tmp_path / "preset.yml"
+    content = {
+        "valid_name_chars": "ABC",
+        "mappings": [
+            {
+                "map_name": "$ConsoleFont",
+                "base_group": "console",
+                "font_name": "F1",
+            }
+        ],
+    }
+    preset_file.write_text(yaml.dump(content), encoding="utf-8")
+
+    p = Preset(preset_file)
+    p.load()
+
+    assert p.data["mappings"][0]["category"] == "console"
+    assert p.data["mappings"][0]["swf_path"] == ""

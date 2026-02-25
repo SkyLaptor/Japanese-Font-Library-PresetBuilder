@@ -28,8 +28,6 @@ TEMPLATE_PRESET_FILE = DATA_DIR / "template_preset.yml"
 CACHE_FILE = DATA_DIR / "cache.yml"
 
 # スカイリムにおける各種ディレクトリ名
-# データディレクトリ
-SKYRIM_DATA_DIR_NAME = "Data"
 # インタフェースディレクトリ名
 SKYRIM_INTERFACE_DIR_NAME = "Interface"
 
