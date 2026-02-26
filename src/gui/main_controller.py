@@ -36,11 +36,38 @@ class MainController:
                         {"font_name": font_name, "swf_path": swf_path}
                     )
 
-        return sorted(font_names_list)
+        # ★修正: 辞書のリストをソート可能にするため、keyを指定
+        # SWFパス（ファイル名）でソート、その後フォント名でソート
+        return sorted(
+            font_names_list,
+            key=lambda x: (
+                str(Path(x.get("swf_path", "")).name),
+                x.get("font_name", ""),
+            ),
+        )
 
-    def validate_required_mappings(self) -> list:
-        """必須項目チェック。未設定の必須マップ名のリストを返す"""
-        missing = []
+    def process_single_swf(self, swf_path: Path, debug: bool = False) -> Dict:
+        """単一のSWFファイルをスキャンし、フォント情報を返す。
+
+        Returns: {"swf_path": Path, "font_names": List[str]}
+        ファイルが存在しないか解析に失敗した場合も、空のfont_namesで返す.
+        """
+        if not swf_path.exists():
+            print(f"⚠️ ファイルが見つかりません: {swf_path}")
+            return {"swf_path": swf_path, "font_names": []}
+
+        try:
+            font_names = swf_parser(
+                swf_path=swf_path, cache=self.cache.data, debug=debug
+            )
+            # font_namesがNoneまたは空の場合も、辞書形式で返す（常にデータ構造を統一）
+            return {
+                "swf_path": swf_path,
+                "font_names": font_names if font_names else [],
+            }
+        except Exception as e:
+            print(f"⚠️ 単一ファイルのスキャンに失敗: {swf_path} - {e}")
+            return {"swf_path": swf_path, "font_names": []}
         for m in self.preset.mappings:
             if m.get("flag") == "require" and (
                 not m.get("font_name") or m.get("font_name") == ""
@@ -57,18 +84,22 @@ class MainController:
                 not_found.append((m.get("map_name"), f_name))
         return not_found
 
-    def generate_preset(self, output_dir: Path):
+    def generate_preset(self, output_dir: Path, use_fallback: bool = False):
         """プリセットを指定フォルダに出力するコア処理。
 
-        - 保存先設定を更新してプリセットを保存
-        - `preset_generator` を呼んで出力ファイルパスを返す
+        Args:
+            output_dir: 出力先ディレクトリ
+            use_fallback: Trueの場合、フォント指定が空でも fonts_core.swf を使用して出力
+
+        Returns:
+            Path: 生成されたfontconfig.txtのパス
         """
         # 更新
         self.preset.output_dir = Path(output_dir)
         self.preset.save()
 
         # 生成処理（IOや重い処理を含む）
-        out_file = preset_generator(self.preset, self.cache.data)
+        out_file = preset_generator(self.preset, self.cache.data, use_fallback)
         return out_file
 
     def save_preset(self):

@@ -6,8 +6,16 @@ from models.cache import Cache
 from models.preset import Preset
 
 
-def preset_generator(preset: Preset, cache_data: Cache) -> Path:
-    """設定に基づいて fontconfig.txt を生成する"""
+def preset_generator(
+    preset: Preset, cache_data: Cache, use_fallback: bool = False
+) -> Path:
+    """設定に基づいて fontconfig.txt を生成する
+
+    Args:
+        preset: プリセット設定
+        cache_data: キャッシュデータ
+        use_fallback: Trueの場合、フォント指定が空でも fonts_core.swf を代替として使用
+    """
     # 出力ディレクトリの準備
     out_dir = preset.output_dir
     # Interfaceフォルダ構造を維持して出力
@@ -16,6 +24,39 @@ def preset_generator(preset: Preset, cache_data: Cache) -> Path:
 
     # 必要なSWFをキャッシュから特定
     used_fonts = {m["font_name"] for m in preset.mappings if m["font_name"]}
+
+    # フォント指定が空で、フォールバック有効な場合
+    if not used_fonts and use_fallback:
+        # fonts_core.swf を代替として使用
+        fallback_path = Path(__file__).parent.parent.parent / "data" / "fonts_core.swf"
+        if fallback_path.exists():
+            fallback_cache_entry = None
+            # キャッシュから fonts_core.swf のエントリを探す
+            for entry in cache_data:
+                swf_rel_path = entry.get("swf_path", "")
+                if "fonts_core" in str(swf_rel_path):
+                    fallback_cache_entry = entry
+                    break
+
+            # もしキャッシュにない場合、新規エントリを作成
+            if not fallback_cache_entry:
+                from modules.swf_parser import swf_parser
+
+                font_names = swf_parser(
+                    swf_path=fallback_path, cache=cache_data, debug=False
+                )
+                fallback_cache_entry = {
+                    "swf_path": str(fallback_path),
+                    "font_names": font_names if font_names else [],
+                }
+
+            # 最初のフォント名をマッピングに使用（存在する場合）
+            if fallback_cache_entry.get("font_names"):
+                first_font = fallback_cache_entry["font_names"][0]
+                used_fonts.add(first_font)
+                print(
+                    f"✅ フォールバック: fonts_core.swf の '{first_font}' を使用します"
+                )
 
     # fontconfig.txtに書き出すパスのセット (例: "Interface/fonts_font1.swf")
     fontlib_paths = set()
