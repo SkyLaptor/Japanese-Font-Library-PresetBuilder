@@ -208,6 +208,7 @@ __marimo__/
 
 # Add.
 *.swf
+!data/fonts_core.swf
 data/gamedata/
 data/cache.yml
 preset/*.yml
