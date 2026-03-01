@@ -2,4 +2,4 @@
 setlocal
 cd /d %~dp0
 
-uv run main.py
+uv run main.py %*

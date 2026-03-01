@@ -18,12 +18,17 @@ DATA_DIR = BASE_DIR / "data"
 # プリセットディレクトリ
 PRESETS_DIR = BASE_DIR / "preset"
 
+# コアフォントSWF
+SKYRIM_CORE_FONT_SWF = DATA_DIR / "fonts_core.swf"
+SKYRIM_CORE_FONT_SWF_IMAGE_DIR = DATA_DIR / "fonts_core_images"
 # テンプレートプログラム設定ファイル
 TEMPLATE_SETTINGS_FILE = DATA_DIR / "template_settings.yml"
 # プログラム設定ファイル
 SETTINGS_FILE = BASE_DIR / "settings.yml"
 # テンプレートプリセットファイル
 TEMPLATE_PRESET_FILE = DATA_DIR / "template_preset.yml"
+# デフォルトプリセットファイル
+DEFAULT_PRESET_FILE = PRESETS_DIR / "default.yml"
 # キャッシュファイル
 CACHE_FILE = DATA_DIR / "cache.yml"
 
@@ -44,6 +49,6 @@ ALLOW_MAPPING_CATEGORY = [
 ]
 
 # サンプル画像拡張子
-SAMPLE_IMG_EXT = [".png", ".jpg", ".jpeg"]
-# サンプル画像ファイル名
-SAMPLE_IMG_NAME = ["sample", "preview", "image"]
+SAMPLE_IMG_EXT = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"]
+# フォルダサンプルとしての画像ファイル名
+SAMPLE_IMG_NAME = ["sample", "preview", "image", "folder", "directory"]
