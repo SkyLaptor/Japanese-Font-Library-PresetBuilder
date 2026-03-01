@@ -1,11 +1,12 @@
-# Japanese Font Library - PresetBuilder
-スカイリム用のフォントプリセットを生成するためのツールです。
+# TESVFontPresetBuilder
+スカイリム(無印/LE/SE/AE/VR)用のフォントプリセットを生成するためのツールです。
 
 ## 動作環境
 以下のツールをインストールしてください。
 
 * **[UV](https://docs.astral.sh/uv/)**
 Pythonのパッケージ管理および実行環境です。
+PowerShell上で以下のコマンドを実行するとインストール可能です。
 
 ```powershell:uvインストール
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -14,15 +15,15 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 ## 使い方
 
 ### Step1. 準備
-1. 本リポジトリをクローン、またはダウンロードして展開します。
-2. 使用したいフォントファイル（SWF形式）をダウンロードし、任意のフォルダに解凍しておきます。
+1. 本リポジトリをクローン、またはダウンロードして解凍します。
+2. 使用したいフォントMODをダウンロードし、任意のフォルダに解凍しておきます。
 
 > [!NOTE]
 > 任意のフォルダにフォントMOD名のフォルダを作り、その中にフォントSWFを配置するとすっきりと管理できます。
 
 ### Step2. ツールの起動
 `run.cmd` をダブルクリックして起動します。  
-初回起動時は読み込みフォルダが設定されていません。画面右上の **「フォルダを開く」** を押し、[準備1](#Step1-準備)でフォントファイルを置いたフォルダを指定してください。
+初回起動時は読み込みフォルダが設定されていません。画面右上の **「フォルダを開く」** を押し、[Step1. 準備](#Step1-準備)でフォントMODを置いたフォルダを指定してください。
 
 > [!NOTE]
 > 指定したフォルダ内にある全てのSWFファイルの検査が実行されます。量によっては多少時間がかかる場合があります。
@@ -39,15 +40,15 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 指定したフォルダに `Interface` フォルダが作成され、その中に以下のファイルが生成されます。
 * `fontconfig.txt`
 * `fontconfig_ja.txt`
-* 各種フォントSWFファイル
+* フォントSWFファイル
 
-これを直接ゲームの `Data` ディレクトリに配置するか、Mod管理ツール（[Vortex](https://www.nexusmods.com/about/vortex) / [Mod Organizer 2](https://github.com/Modorganizer2/modorganizer/releases)など）で読み込ませることでゲームに適用されます。
+これを直接ゲームの `Data` ディレクトリに配置するか、`.7z` や `.zip` に圧縮してからMOD管理ツール（[Vortex](https://www.nexusmods.com/about/vortex) / [Mod Organizer 2](https://github.com/Modorganizer2/modorganizer/releases) など）で読み込ませることでゲームに適用されます。
 
 ### Step5. 設定の保存
 現在の設定内容は保存可能です。  
 画面左下の **「現在のユーザープリセット設定を保存」** を押すと、次回起動時に自動で設定が読み込まれるようになります。
 
-## 💡 フォントプレビュー機能について
+## フォントプレビュー機能について
 本ツールには、フォントの仕上がりを視覚的に確認できる **プレビュー表示機能** があります。  
 SWFファイル自体を編集することなく、特定のルールに従って画像ファイルを配置するだけで、UI上にサンプル画像が表示されます。
 
@@ -61,15 +62,14 @@ SWFファイル自体を編集することなく、特定のルールに従っ�
    - SWFファイルと同じ名前にする。
    - 例: `fonts_apricot.swf` → `fonts_apricot.png`
 3. **フォルダ内から自動検出**
-   - SWFと同じフォルダ内に、ファイル名にキーワード（`sample`、`preview`、`image`、`folder`、`directory`、`親フォルダ名`）を含む画像を置く。
+   - SWFと同じフォルダ内に、ファイル名にキーワード（`sample`,`preview`,`image`,`folder`,`directory`,`親フォルダ名`）を含む画像を置く。
    - 例: `sample.jpg`, `preview_all.png`, `myfont_sample.jpeg`
 
 ### 活用イメージ
-- **配布されているフォント**: MOD紹介に貼られている画像をSWFと同じフォルダに `sample.jpg` としておいておけばいちいちMODページを確認せずに確認できます。
-- **自作の確認用**: ゲーム内でのスクリーンショットを「SWF名.png」として保存しておけば、ツール上でいつでもフォントの雰囲気を再確認できます。
+- **配布されているフォント**: MOD紹介に貼られている画像をSWFと同じフォルダに `sample.jpg` としておいておけばいちいちMODページを見ずとも、確認できるようになります。
+- **自作の確認用**: ゲーム内でのスクリーンショットを「SWF名.png」として保存しておけば、ツール上でいつでもフォントの雰囲気を確認できます。
 
 ## 言語の変更方法 / How to Change Language
-
 本ツールは多言語対応しており、UIの表示言語を切り替えることが可能です。
 The tool supports multiple languages, and you can switch the UI display language.
 
@@ -83,8 +83,8 @@ You can specify the language using a command-line argument. Once launched this w
 ```
 
 ### Step2. 設定ファイルからの変更 (Manual Configuration)
-settings.yml を直接編集することでも変更可能です。  
-You can also change it by manually editing settings.yml.
+`settings.yml` を直接編集することでも変更可能です。  
+You can also change it by manually editing `settings.yml` .
 
 ```yaml:settings.yml
 lang: en-us

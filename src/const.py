@@ -1,7 +1,7 @@
 from pathlib import Path
 
 # メインウィンドウのタイトル
-MAIN_WINDOW_TITLE = "Japanese Font Library - PresetBuilder"
+MAIN_WINDOW_TITLE = "TESVFontPresetBuilder"
 
 # 日付フォーマット（キャッシュ比較で使用するため取り扱い注意）
 TIME_FORMAT = "%Y/%m/%d %H:%M:%S"
