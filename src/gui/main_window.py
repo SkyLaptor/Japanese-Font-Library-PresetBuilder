@@ -1279,7 +1279,7 @@ class MainWindow(QMainWindow):
         return True
 
 
-def run_app(app: QApplication = None, debug: bool = False):
+def run_app(app: QApplication = None, debug: bool = False, lang: str | None = None):
     """アプリケーションを起動するユーティリティ。
 
     `main.py` から起動処理を委譲するために、設定・プリセット・キャッシュの読み込み
@@ -1295,7 +1295,13 @@ def run_app(app: QApplication = None, debug: bool = False):
     # 1. システム設定を読み込み
     settings = Settings(Path(SETTINGS_FILE))
     settings.load()
-    set_language(settings.lang)
+    if lang:
+        resolved_lang = set_language(lang)
+        if settings.lang != resolved_lang:
+            settings.lang = resolved_lang
+            settings.save()
+    else:
+        set_language(settings.lang)
     if settings.migrated:
         dprint(
             tr("debug.settings_migrated"),
