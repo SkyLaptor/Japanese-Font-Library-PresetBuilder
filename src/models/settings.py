@@ -148,3 +148,18 @@ class Settings:
 
         output_dir は絶対パスで渡すこと（例: "C:/path/to/output"）。"""
         self.data["output_dir"] = value
+
+    @property
+    def lang(self):
+        """lang を返す
+
+        lang は言語コード（例: "ja-jp"）を返す。存在しない場合は "ja-jp" を返す。
+        """
+        return self.data.get("lang", "ja-jp")
+
+    @lang.setter
+    def lang(self, value):
+        """lang を設定する
+
+        lang は言語コードで渡すこと（例: "ja-jp"）。"""
+        self.data["lang"] = value
