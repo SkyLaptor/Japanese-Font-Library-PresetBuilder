@@ -1,0 +1,172 @@
+common:
+  error: Error
+  done: Done
+
+labels:
+  undefined: Undefined
+  unset: (Unset)
+
+buttons:
+  open_folder: Open Folder
+  load: Load
+  reload: Reload
+  save_as: Save As...
+  apply_selected_font_to_group: Apply selected font in the left list to all {group} mappings
+  save_current_preset: Save current user preset settings
+  generate_preset: Export user preset
+  open_output_dir: Open Output Folder
+  close: Close
+
+tooltip:
+  apply_selected_font_to_row: Apply the selected font here
+
+swf_dir:
+  current: "Current SWF folder: {value}"
+
+dialog:
+  preview_image:
+    title: Preview Image
+    image_load_failed: Failed to load image
+  change_swf_dir:
+    title: Confirm SWF Folder Change
+    message: |
+      An SWF folder is already configured.
+      Changing the folder may cause inconsistencies with your current preset settings.
+
+      Do you want to continue?
+  select_swf_dir:
+    title: Select a folder containing font SWF files
+  selection_error:
+    title: Selection Error
+    pick_font: Please select a font name, not an SWF file row.
+  save_as:
+    title: Save Preset As
+    prompt: "Enter preset name:"
+    created: "Created preset '{preset_name}'."
+  overwrite_confirm:
+    title: Overwrite Confirmation
+    message: "'{preset_name}' already exists. Overwrite it?"
+  unsaved_confirm:
+    title: Save Confirmation
+    before_reload: Changes are not saved. Save before reloading?
+    before_switch: Changes are not saved. Save before switching?
+    before_close: Changes are not saved. Save before closing?
+  input_error:
+    title: Input Error
+  input_check:
+    title: Input Check
+  font_not_detected:
+    title: Font Not Detected
+    message_header: |
+      The linked font SWF files for the following configured font maps were not found.
+      Continue export anyway? (The UI may show tofu characters.)
+
+  select_output_dir:
+    title: Select output folder for user preset
+  generate_done:
+    message: |
+      Generation completed!
+
+      Output:
+      {output_dir}
+    fallback_prefix: |
+      No fonts were specified, so the default fonts_core.swf was used.
+
+  save_empty_font_settings_confirm:
+    message: |
+      All font settings are currently empty. Save as-is?
+      (Existing settings may be overwritten.)
+  save_error:
+    title: Save Error
+
+progress:
+  working: Processing
+  refresh_font_list:
+    message: |
+      Updating font list...
+      Note: If there are many font files, analysis may take some time.
+
+preset:
+  group_title: Preset Management
+  label: "Preset:"
+
+font_list:
+  group_title: Fonts in Folder
+  search_placeholder: Search font names...
+
+preview:
+  label: Preview
+  no_selection: No selection
+  swf_row_selected: SWF file row is selected
+  swf_not_found: |-
+    SWF file not found
+    {font_name}
+  image_not_found: |-
+    Preview image not found
+    {font_name}
+
+mappings:
+  group_title: fontconfig mappings (by category)
+  category:
+    special_info: "⚠️ <b>Notice:</b> This category usually does not need to be changed."
+    console_info: Fonts used in console windows.
+    every_info: Fonts used across the UI.
+    book_info: Fonts used in books.
+    handwrite_info: Fonts used in letters and notes.
+    mcm_info: Fonts used when JapaneseFontLibrary MCM Font Map Patch is applied.
+    custom_info: >-
+      This is a custom added map.<br>It is displayed when you add an entry with category: custom in mappings
+      of the preset file (presets\preset_name.yml).
+
+errors:
+  copy_source_not_found: |-
+    Source not found:
+    {path}
+  copy_source_dir_not_found: |-
+    Source folder not found:
+    {path}
+  system_asset_copy_failed: |-
+    Failed to deploy assets under system.
+    Source: {source}
+    Source folder: {source_dir}
+    Destination: {target}
+    Detail: {detail}
+  folder_not_found: Folder not found.
+  refresh_font_list_failed: "An error occurred while updating the font list:"
+  required_mapping_missing_header: |
+    The following required mappings are not set. Please select fonts:
+
+  no_font_and_no_fallback: No fonts are specified and default font (fonts_core.swf) was not found.
+  generate_failed: |-
+    An error occurred during generation:
+    {detail}
+  save_settings_failed: |-
+    Failed to save settings:
+    {detail}
+  swf_dir_not_set: settings.swf_dir is not set.
+  swf_dir_invalid: "settings.swf_dir is invalid: {path}"
+  mapping_swf_path_missing: A font is selected, but SWF path is missing.
+  mapping_swf_outside_base: Selected SWF is outside settings.swf_dir, or swf_dir is not configured.
+  file_not_found: "File not found: {path}"
+  single_swf_scan_failed: "Failed to scan single file: {path} - {detail}"
+  swf_path_resolve_failed: "Failed to resolve SWF path: {swf_path} ({detail})"
+  default_preset_init_failed: "Failed to initialize default preset: {detail}"
+  preset_loading_failed: "Error while loading preset: {preset_file}: {detail}"
+  settings_save_failed: "Failed to save system settings: {detail}"
+  settings_sanitize_failed: "Error while sanitizing system settings: {detail}"
+  preset_migration_failed: "Failed to migrate preset: {preset_file}: {detail}"
+  bulk_preset_migration_failed: "Error during bulk preset migration: {detail}"
+
+debug:
+  settings_swf_dir_invalid_reset: "settings.yml swf_dir is invalid, resetting to unset: {swf_dir}"
+  scan_completed: "Scan completed: {file_count} files / {elapsed_ms} ms"
+  missing_fonts_header: "\nConfigured fonts were not found in the current SWF folder:"
+  output_cancelled: Output was cancelled.
+  use_fallback_font: "⚠️ No font selected; using fonts_core.swf as fallback."
+  generate_success: "✅ Generation succeeded: {output}"
+  preset_saved: "✅ User preset saved."
+  settings_migrated: System settings migration completed. Please review and save if needed.
+  default_preset_created: "No preset existed, so a default preset was created: {preset_path}"
+  settings_interpolated_by_preset: "System settings were interpolated from preset: {preset_file}"
+  settings_saved: System settings updated and saved.
+  preset_migrated: "Migration completed. Please review and save if needed: {preset_file}"

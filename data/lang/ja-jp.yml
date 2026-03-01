@@ -1,0 +1,172 @@
+common:
+  error: エラー
+  done: 完了
+
+labels:
+  undefined: 未設定
+  unset: (未設定)
+
+buttons:
+  open_folder: フォルダを開く
+  load: 読み込む
+  reload: 再読み込み
+  save_as: 別名で保存...
+  apply_selected_font_to_group: 左のリストで選択中のフォントを {group} 全体に適用
+  save_current_preset: 現在のユーザープリセット設定を保存
+  generate_preset: ユーザープリセットを出力
+  open_output_dir: 出力先を開く
+  close: 閉じる
+
+tooltip:
+  apply_selected_font_to_row: 選択中のフォントをここに適用
+
+swf_dir:
+  current: "参照中のSWFフォルダ: {value}"
+
+dialog:
+  preview_image:
+    title: プレビュー画像
+    image_load_failed: 画像を読み込めませんでした
+  change_swf_dir:
+    title: SWFフォルダ変更の確認
+    message: |
+      すでにSWFフォルダが設定されています。
+      フォルダを変更すると、現在のプリセット設定と不整合が起きる可能性があります。
+
+      このまま変更しますか？
+  select_swf_dir:
+    title: フォントSWFが含まれるフォルダを選択
+  selection_error:
+    title: 選択エラー
+    pick_font: SWFファイル名ではなく、フォント名を選択してください。
+  save_as:
+    title: プリセットの別名保存
+    prompt: "プリセット名を入力してください:"
+    created: プリセット '{preset_name}' を作成しました。
+  overwrite_confirm:
+    title: 上書き確認
+    message: "'{preset_name}' は既に存在します。上書きしますか？"
+  unsaved_confirm:
+    title: 保存の確認
+    before_reload: 変更が保存されていません。再読み込み前に保存しますか？
+    before_switch: 変更が保存されていません。切り替える前に保存しますか？
+    before_close: 変更が保存されていません。保存してから閉じますか？
+  input_error:
+    title: 入力エラー
+  input_check:
+    title: 入力チェック
+  font_not_detected:
+    title: フォント未検出
+    message_header: |
+      以下の設定済みフォントマップにて、紐づくフォントSWFが存在しません。
+      そのまま出力しますか？（UI全体が豆腐化する可能性があります）
+
+  select_output_dir:
+    title: ユーザープリセットの出力先フォルダを選択してください
+  generate_done:
+    message: |
+      生成が完了しました！
+
+      出力先:
+      {output_dir}
+    fallback_prefix: |
+      フォントが指定されていなかったため、標準の fonts_core.swf を使用して書き出しました。
+
+  save_empty_font_settings_confirm:
+    message: |
+      現在、全てのフォント設定が空ですが、このまま保存しますか？
+      (既存の設定が消える可能性があります)
+  save_error:
+    title: 保存エラー
+
+progress:
+  working: 処理中
+  refresh_font_list:
+    message: |
+      フォントの一覧を更新しています...
+      ※フォントファイル数が多い場合、解析に時間がかかることがあります。
+
+preset:
+  group_title: プリセット管理
+  label: "プリセット:"
+
+font_list:
+  group_title: フォルダ内に存在するフォント名
+  search_placeholder: フォント名を検索...
+
+preview:
+  label: プレビュー
+  no_selection: No selection
+  swf_row_selected: SWFファイルが選択されています
+  swf_not_found: |-
+    SWFファイルが見つかりません
+    {font_name}
+  image_not_found: |-
+    プレビュー画像が見つかりません
+    {font_name}
+
+mappings:
+  group_title: fontconfig マッピング (カテゴリ別)
+  category:
+    special_info: "⚠️ <b>注意:</b> このカテゴリは通常、変更する必要はありません。"
+    console_info: コンソールウィンドウで使用されるフォントです。
+    every_info: UI全般で使用されるフォントです。
+    book_info: 本で使用されるフォントです。
+    handwrite_info: 手紙、メモで使用されるフォントです。
+    mcm_info: JapaneseFontLibraryのMCMフォントマップパッチ適用状態で使用されるフォントです。
+    custom_info: >-
+      独自に追加されたマップです。<br>プリセットファイル(presets\プリセット名.yml)の mappings に、category:
+      custom で追加登録することで表示されます。
+
+errors:
+  copy_source_not_found: |-
+    コピー元が見つかりません:
+    {path}
+  copy_source_dir_not_found: |-
+    コピー元フォルダが見つかりません:
+    {path}
+  system_asset_copy_failed: |-
+    system配下アセットの配置に失敗しました。
+    コピー元: {source}
+    コピー元フォルダ: {source_dir}
+    コピー先: {target}
+    詳細: {detail}
+  folder_not_found: フォルダが見つかりません。
+  refresh_font_list_failed: "フォント名一覧の更新中にエラーが発生しました:"
+  required_mapping_missing_header: |
+    以下の必須項目が設定されていません。フォントを選択してください：
+
+  no_font_and_no_fallback: フォントが指定されておらず、標準フォント(fonts_core.swf)も見つかりません。
+  generate_failed: |-
+    生成中にエラーが発生しました:
+    {detail}
+  save_settings_failed: |-
+    設定の保存に失敗しました:
+    {detail}
+  swf_dir_not_set: settings.swf_dir が未設定です。
+  swf_dir_invalid: "settings.swf_dir が不正です: {path}"
+  mapping_swf_path_missing: フォントが指定されていますが SWF パスがありません。
+  mapping_swf_outside_base: 選択されたSWFが settings.swf_dir の外側、または swf_dir 未設定です。
+  file_not_found: "ファイルが見つかりません: {path}"
+  single_swf_scan_failed: "単一ファイルのスキャンに失敗: {path} - {detail}"
+  swf_path_resolve_failed: "SWFパス解決に失敗しました: {swf_path} ({detail})"
+  default_preset_init_failed: "デフォルトプリセットの初期化に失敗しました: {detail}"
+  preset_loading_failed: "プリセット読み込み中にエラー: {preset_file}: {detail}"
+  settings_save_failed: "システム設定の保存に失敗しました: {detail}"
+  settings_sanitize_failed: "システム設定の健全化中にエラーが発生しました: {detail}"
+  preset_migration_failed: "プリセットのマイグレートに失敗しました: {preset_file}: {detail}"
+  bulk_preset_migration_failed: "プリセット一括マイグレート中にエラーが発生しました: {detail}"
+
+debug:
+  settings_swf_dir_invalid_reset: "settings.yml の swf_dir が無効なため未設定に戻します: {swf_dir}"
+  scan_completed: "スキャンが完了しました: {file_count} ファイル / {elapsed_ms} ms"
+  missing_fonts_header: "\n設定されたフォントが現在のSWFフォルダ内に見つかりません:"
+  output_cancelled: 出力がキャンセルされました。
+  use_fallback_font: ⚠️ フォント指定が空のため、fonts_core.swf を使用して補完します。
+  generate_success: "✅ 生成成功: {output}"
+  preset_saved: ✅ ユーザープリセットを保存しました。
+  settings_migrated: システム設定データのマイグレーションが完了しました。必要に応じて内容を確認して保存してください。
+  default_preset_created: "プリセットが存在しなかったため、デフォルトプリセットを作成しました: {preset_path}"
+  settings_interpolated_by_preset: "システム設定をプリセットで補間しました: {preset_file}"
+  settings_saved: システム設定を更新して保存しました。
+  preset_migrated: "マイグレートが完了しました。必要に応じて内容を確認して保存してください。: {preset_file}"

@@ -15,6 +15,12 @@ SKYRIM_FONTCONFIG_ENCODE = "utf-8"
 BASE_DIR = Path(__file__).parent.parent
 # データディレクトリ（テンプレート類やキャッシュをここに置いておく。）
 DATA_DIR = BASE_DIR / "data"
+# 言語ディレクトリ
+LANG_DIR = DATA_DIR / "lang"
+# 既定の言語コード
+DEFAULT_LANG_CODE = "ja-jp"
+# 既定の言語ファイル
+DEFAULT_LANG_FILE = LANG_DIR / f"{DEFAULT_LANG_CODE}.yml"
 # プリセットディレクトリ
 PRESETS_DIR = BASE_DIR / "preset"
 

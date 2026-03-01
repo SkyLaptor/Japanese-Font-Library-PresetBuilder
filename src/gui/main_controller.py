@@ -4,6 +4,7 @@ from typing import Dict, List
 from modules.generator import preset_generator
 from modules.swf_parser import swf_parser
 from utils.dprint import dprint
+from utils.i18n import tr
 
 
 class MainController:
@@ -16,11 +17,11 @@ class MainController:
     def _get_swf_base_dir(self) -> Path:
         """settings.swf_dir を基準ディレクトリとして返す。"""
         if not self.settings.swf_dir:
-            raise ValueError("settings.swf_dir が未設定です。")
+            raise ValueError(tr("errors.swf_dir_not_set"))
 
         base_dir = Path(self.settings.swf_dir).resolve()
         if not base_dir.exists() or not base_dir.is_dir():
-            raise ValueError(f"settings.swf_dir が不正です: {base_dir}")
+            raise ValueError(tr("errors.swf_dir_invalid", path=base_dir))
         return base_dir
 
     def to_relative_swf_path(self, swf_path: str | Path) -> str:
@@ -108,7 +109,7 @@ class MainController:
         ファイルが存在しないか解析に失敗した場合も、空のfont_namesで返す.
         """
         if not swf_path.exists():
-            dprint(f"ファイルが見つかりません: {swf_path}", self.debug)
+            dprint(tr("errors.file_not_found", path=swf_path), self.debug)
             return {"swf_path": swf_path, "font_names": []}
 
         try:
@@ -121,7 +122,7 @@ class MainController:
                 "font_names": font_names if font_names else [],
             }
         except Exception as e:
-            print(f"単一ファイルのスキャンに失敗: {swf_path} - {e}")
+            print(tr("errors.single_swf_scan_failed", path=swf_path, detail=e))
             return {"swf_path": swf_path, "font_names": []}
 
     def validate_required_mappings(self) -> list:
@@ -172,14 +173,12 @@ class MainController:
             return self._update_preset_mapping(map_name, "", "", save=save)
 
         if not selected_swf_path:
-            raise ValueError("フォントが指定されていますが SWF パスがありません。")
+            raise ValueError(tr("errors.mapping_swf_path_missing"))
 
         try:
             rel_swf_path = self.to_relative_swf_path(selected_swf_path)
         except ValueError as e:
-            raise ValueError(
-                "選択されたSWFが settings.swf_dir の外側、または swf_dir 未設定です。"
-            ) from e
+            raise ValueError(tr("errors.mapping_swf_outside_base")) from e
 
         return self._update_preset_mapping(
             map_name,
@@ -218,7 +217,13 @@ class MainController:
             try:
                 self.resolve_absolute_swf_path(rel_swf_path)
             except Exception as e:
-                print(f"SWFパス解決に失敗しました: {rel_swf_path} ({e})")
+                print(
+                    tr(
+                        "errors.swf_path_resolve_failed",
+                        swf_path=rel_swf_path,
+                        detail=e,
+                    )
+                )
 
         self.preset.save()
 
