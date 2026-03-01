@@ -1,11 +1,15 @@
 import os
+import shutil
+import time
 from pathlib import Path
 
 import yaml
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -29,25 +33,105 @@ from PySide6.QtWidgets import (
 from const import (
     ALLOW_MAPPING_CATEGORY,
     CACHE_FILE,
+    DEFAULT_PRESET_FILE,
     ENCODE,
     MAIN_WINDOW_TITLE,
     PRESETS_DIR,
     SETTINGS_FILE,
+    SKYRIM_CORE_FONT_SWF,
+    SKYRIM_CORE_FONT_SWF_IMAGE_DIR,
 )
 from models.cache import Cache
 from models.preset import Preset
 from models.settings import Settings
 from src.gui.main_controller import MainController
 from src.modules.find_preview_image import find_preview_image
+from utils.dprint import dprint
+
+SWF_FILE_LINE_PREFIX = "SWF: "
+FONT_NAME_LINE_PREFIX = "  - "
+UNDEFINE_FONT_NAME = "未設定"
+
+
+class ClickableLabel(QLabel):
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class PreviewImageDialog(QDialog):
+    def __init__(self, image_path: Path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("プレビュー画像")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setAlignment(Qt.AlignCenter)
+
+        self.image_label = ClickableLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setScaledContents(False)
+        self.image_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.image_label.setMinimumSize(1, 1)
+        self.image_label.clicked.connect(self.accept)
+
+        self.scroll_area.setWidget(self.image_label)
+        layout.addWidget(self.scroll_area)
+
+        pixmap = QPixmap(str(image_path))
+        if pixmap.isNull():
+            self.image_label.setText("画像を読み込めませんでした")
+            self._original_pixmap = None
+            return
+
+        self._original_pixmap = pixmap
+        self.resize(pixmap.size())
+        self._update_scaled_pixmap()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_scaled_pixmap()
+
+    def _update_scaled_pixmap(self):
+        if not self._original_pixmap:
+            return
+
+        viewport_size = self.scroll_area.viewport().size()
+        if viewport_size.width() <= 0 or viewport_size.height() <= 0:
+            return
+
+        scaled = self._original_pixmap.scaled(
+            viewport_size,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        self.image_label.setPixmap(scaled)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: Settings, preset: Preset, cache: Cache):
+    def __init__(
+        self, settings: Settings, preset: Preset, cache: Cache, debug: bool = False
+    ):
         super().__init__()
         self.settings = settings
         self.preset = preset
         self.cache = cache
-        self.controller = MainController(settings=settings, preset=preset, cache=cache)
+        self.debug = debug
+        self.controller = MainController(
+            settings=settings,
+            preset=preset,
+            cache=cache,
+            debug=self.debug,
+        )
+        self.scanned_swf_entries = []
+        self._pending_mapping_swf_paths = {}
+        self.current_preview_image_path: Path | None = None
+        self.startup_aborted = False
         # プリセット変更フラグ
         # 何か設定を操作するようなアクションを起こしたらTrueに、プリセットを保存するアクションでFalseにすること！
         self.preset_is_dirty = False
@@ -115,8 +199,73 @@ class MainWindow(QMainWindow):
         self.window_init()
 
     def window_init(self):
-        # 起動時の重い処理は `run_app()` 側で行うため、ここでは何もしない
-        return
+        # settings.yml に swf_dir が設定されていれば起動時に読み込む
+        if not self.settings.swf_dir:
+            return
+
+        swf_dir = Path(self.settings.swf_dir)
+        if not swf_dir.exists() or not swf_dir.is_dir():
+            dprint(
+                f"settings.yml の swf_dir が無効なため未設定に戻します: {swf_dir}",
+                self.debug,
+            )
+            self.settings.swf_dir = ""
+            self.settings.save()
+            self.label_swf_dir_path.setText("参照中のSWFフォルダ: (未設定)")
+            self.button_load_swf_dir.setEnabled(False)
+            return
+
+        self.label_swf_dir_path.setText(f"参照中のSWFフォルダ: {str(swf_dir)}")
+        self.button_load_swf_dir.setEnabled(True)
+        if not self.ensure_system_fonts_core(swf_dir):
+            self.startup_aborted = True
+            return
+        self.refresh_font_names_list(swf_dir)
+
+    def ensure_system_fonts_core(self, swf_dir: Path) -> bool:
+        """SWFフォルダ内の system に必須アセットを配置する。"""
+        target_core = swf_dir / "system" / "fonts_core.swf"
+        target_system_dir = target_core.parent
+
+        if not SKYRIM_CORE_FONT_SWF.exists():
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"コピー元が見つかりません:\n{SKYRIM_CORE_FONT_SWF}",
+            )
+            return False
+
+        if (
+            not SKYRIM_CORE_FONT_SWF_IMAGE_DIR.exists()
+            or not SKYRIM_CORE_FONT_SWF_IMAGE_DIR.is_dir()
+        ):
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"コピー元フォルダが見つかりません:\n{SKYRIM_CORE_FONT_SWF_IMAGE_DIR}",
+            )
+            return False
+
+        try:
+            target_system_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SKYRIM_CORE_FONT_SWF, target_core)
+
+            for sample_file in SKYRIM_CORE_FONT_SWF_IMAGE_DIR.iterdir():
+                if sample_file.is_file():
+                    shutil.copy2(sample_file, target_system_dir / sample_file.name)
+
+            return True
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "エラー",
+                "system配下アセットの配置に失敗しました。\n"
+                f"コピー元: {SKYRIM_CORE_FONT_SWF}\n"
+                f"コピー元フォルダ: {SKYRIM_CORE_FONT_SWF_IMAGE_DIR}\n"
+                f"コピー先: {target_system_dir}\n"
+                f"詳細: {e}",
+            )
+            return False
 
     def setup_swf_dir_selection(self, layout):
         """SWFフォルダ選択レイアウトのセットアップ"""
@@ -151,11 +300,26 @@ class MainWindow(QMainWindow):
 
     def on_browse_swf_dir_clicked(self):
         """SWFフォルダ閲覧ボタン押下時のアクション"""
+        if self.settings.swf_dir:
+            reply = QMessageBox.warning(
+                self,
+                "SWFフォルダ変更の確認",
+                "すでにSWFフォルダが設定されています。\n"
+                "フォルダを変更すると、現在のプリセット設定と不整合が起きる可能性があります。\n\n"
+                "このまま変更しますか？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply == QMessageBox.No:
+                return
+
         dir_path = QFileDialog.getExistingDirectory(
             self, "フォントSWFが含まれるフォルダを選択"
         )
         if dir_path:
             p = Path(dir_path)
+            if not self.ensure_system_fonts_core(p):
+                return
             self.settings.swf_dir = str(p)
             self.settings.save()
             self.label_swf_dir_path.setText(f"参照中のSWFフォルダ: {str(p)}")
@@ -167,6 +331,8 @@ class MainWindow(QMainWindow):
         # SWFフォルダが設定されていて、かつ存在しているか。
         swf_dir = Path(self.settings.swf_dir) if self.settings.swf_dir else None
         if swf_dir and swf_dir.exists():
+            if not self.ensure_system_fonts_core(swf_dir):
+                return
             self.refresh_font_names_list(swf_dir)
             # QMessageBox.information(self, "完了", "フォルダの内容を読み込みました。")
         else:
@@ -187,37 +353,25 @@ class MainWindow(QMainWindow):
 
         try:
             # 1. フォルダスキャン実行
-            raw_list = self.controller.scan_swf_directory(swf_dir_path, debug=False)
+            scan_start = time.perf_counter()
+            raw_list = self.controller.scan_swf_directory(swf_dir_path)
+            scan_elapsed_ms = (time.perf_counter() - scan_start) * 1000
 
-            # 2. 【重要】スキャン結果の全パスを文字列に変換（保存エラー回避）
-            new_list = []
-            for item in raw_list:
-                item["swf_path"] = str(item["swf_path"])
-                new_list.append(item)
-
-            # 3. fonts_core.swf の処理
-            from pathlib import Path as PathlibPath
-
-            core_path = (
-                PathlibPath(__file__).parent.parent.parent / "data" / "fonts_core.swf"
+            # 2. UI表示向けにパスを正規化（Controllerに委譲）
+            new_list = self.controller.normalize_scan_results_for_ui(
+                raw_list, swf_dir_path
             )
-            core_info = self.controller.process_single_swf(core_path)
 
-            if core_info:
-                # ここも確実に文字列に変換
-                core_info["swf_path"] = str(core_path)
-                new_list.insert(0, core_info)
-                print(
-                    f"✅ fonts_core.swf を追加: {len(core_info.get('font_names', []))} フォント"
-                )
-
-            # 4. 保存と反映
-            self.cache.data = new_list
+            # 3. 保存と反映
+            self.scanned_swf_entries = new_list
             self.cache.save()
-            print(f"✅ キャッシュを保存しました: {len(self.cache.data)} 件")
+            dprint(
+                f"スキャンが完了しました: {len(self.scanned_swf_entries)} ファイル / {scan_elapsed_ms:.1f} ms",
+                self.debug,
+            )
 
             # UI反映
-            self.refresh_ui_from_cache()
+            self.refresh_ui_from_scan_results()
 
         except Exception as e:
             msg = "フォント名一覧の更新中にエラーが発生しました:"
@@ -242,7 +396,12 @@ class MainWindow(QMainWindow):
         self.preset_combo.currentTextChanged.connect(self.on_preset_changed)
         boxlayout_preset.addWidget(self.preset_combo, stretch=1)
 
-        # 2. 別名保存ボタン
+        # 2. 再読み込みボタン
+        btn_reload = QPushButton("再読み込み")
+        btn_reload.clicked.connect(self.on_reload_preset_clicked)
+        boxlayout_preset.addWidget(btn_reload)
+
+        # 3. 別名保存ボタン
         btn_save_as = QPushButton("別名で保存...")
         btn_save_as.clicked.connect(self.on_preset_save_as_clicked)
         boxlayout_preset.addWidget(btn_save_as)
@@ -278,9 +437,12 @@ class MainWindow(QMainWindow):
             font_name = self.preset.get_mapping_font_name(map_name)
             combo.blockSignals(True)
             # もし現在のリストにないフォント名なら追加して選択
-            if font_name and combo.findText(font_name) == -1:
-                combo.addItem(font_name, font_name)
-            combo.setCurrentText(font_name if font_name else "-- 選択なし --")
+            if font_name and combo.findData(font_name) == -1:
+                combo.addItem(self.format_mapping_font_label(font_name), font_name)
+
+            idx = combo.findData(font_name if font_name else "")
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
             combo.blockSignals(False)
 
         # 未保存フラグをリセット
@@ -291,6 +453,12 @@ class MainWindow(QMainWindow):
         left_group = QGroupBox("フォルダ内に存在するフォント名")
         left_layout = QVBoxLayout(left_group)
 
+        # フォント名検索
+        self.lineedit_font_search = QLineEdit()
+        self.lineedit_font_search.setPlaceholderText("フォント名を検索...")
+        self.lineedit_font_search.textChanged.connect(self.on_font_search_text_changed)
+        left_layout.addWidget(self.lineedit_font_search)
+
         # フォントリスト
         self.list_widget_font_names = QListWidget()
         # 項目が選択されたらプレビューを更新するシグナルを接続
@@ -300,8 +468,10 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.list_widget_font_names, stretch=2)
 
         # ★プレビュー画像表示エリア
-        self.preview_label = QLabel("プレビュー")
+        self.preview_label = ClickableLabel("プレビュー")
         self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.clicked.connect(self.on_preview_label_clicked)
+        self.preview_label.setCursor(Qt.ArrowCursor)
 
         # 「自分からはサイズを主張しない（親のレイアウトに従う）」という設定
         self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -330,8 +500,7 @@ class MainWindow(QMainWindow):
             normal_infolabel_style = "color: #4a5568; background-color: #edf2f7; border: 1px solid #cbd5e0; padding: 8px; border-radius: 5px;"
             if group == "special":
                 info_label = QLabel(
-                    "⚠️ <b>注意:</b> このカテゴリは通常、変更する必要はありません。<br>"
-                    "バニラの特殊フォント（ドラゴン文字等）を維持することを推奨します。"
+                    "⚠️ <b>注意:</b> このカテゴリは通常、変更する必要はありません。"
                 )
                 info_label.setStyleSheet(warning_infolabel_style)
                 info_label.setWordWrap(True)
@@ -414,8 +583,10 @@ class MainWindow(QMainWindow):
                 # 3. コンボボックス (右端)
                 combo = QComboBox()
                 combo.setObjectName(map_name)
-                combo.currentTextChanged.connect(
-                    lambda text, n=map_name: self.on_mapping_changed(n, text)
+                combo.currentIndexChanged.connect(
+                    lambda _, n=map_name, c=combo: self.on_mapping_changed(
+                        n, c.currentData()
+                    )
                 )
                 self.combos[map_name] = combo
 
@@ -445,7 +616,7 @@ class MainWindow(QMainWindow):
         if selected_item:
             item_text = selected_item.text()
             # SWFファイル名の行は無視
-            if item_text.startswith("●"):
+            if item_text.startswith(SWF_FILE_LINE_PREFIX):
                 QMessageBox.information(
                     self,
                     "選択エラー",
@@ -453,17 +624,23 @@ class MainWindow(QMainWindow):
                 )
                 return
             # フォント名から接頭辞を除去
-            font_name = item_text.lstrip("　・").strip()
+            font_name = item_text.lstrip(FONT_NAME_LINE_PREFIX).strip()
+            swf_path = selected_item.data(Qt.UserRole)
             combo = self.combos.get(map_name)
             if combo:
+                if swf_path:
+                    self._pending_mapping_swf_paths[map_name] = str(swf_path)
                 # findTextで見つからない（Dragon_script等）場合も考慮して
-                idx = combo.findText(font_name)
+                idx = combo.findData(font_name)
                 if idx >= 0:
                     combo.setCurrentIndex(idx)
                 else:
                     # 暫定的に追加して選択
-                    combo.addItem(font_name, font_name)
-                    combo.setCurrentText(font_name)
+                    combo.addItem(
+                        self.format_mapping_font_label(font_name, str(swf_path or "")),
+                        font_name,
+                    )
+                    combo.setCurrentIndex(combo.findData(font_name))
 
     def on_apply_font_to_group(self, group_name: str):
         """左のリストで選択されているフォント名を、グループ内の全ての行に適用する"""
@@ -473,7 +650,7 @@ class MainWindow(QMainWindow):
 
         item_text = selected_item.text()
         # SWFファイル名の行は無視
-        if item_text.startswith("●"):
+        if item_text.startswith(SWF_FILE_LINE_PREFIX):
             QMessageBox.information(
                 self,
                 "選択エラー",
@@ -488,53 +665,40 @@ class MainWindow(QMainWindow):
         for m in group_mappings:
             self.on_apply_selected_to_row(m["map_name"])
 
-    def refresh_ui_from_cache(self):
-        """スキャンを行わず、現在のフォルダ配下のキャッシュデータのみをUIに反映する"""
+    def refresh_ui_from_scan_results(self):
+        """現在のスキャン結果をUIに反映する"""
         if not self.settings.swf_dir:
             self.list_widget_font_names.clear()
             return
 
-        # エラー防止: cache.data が None または空の場合
-        if not self.cache.data or not isinstance(self.cache.data, list):
+        if not self.scanned_swf_entries or not isinstance(
+            self.scanned_swf_entries, list
+        ):
             self.list_widget_font_names.clear()
             return
-
-        # 比較用に Path オブジェクト化
-        current_swf_dir = Path(self.settings.swf_dir).resolve()
 
         # SWFファイル名ごとにフォント名をグループ化
         swf_to_fonts = {}
         all_fonts = []
 
-        for entry in self.cache.data:
+        for entry in self.scanned_swf_entries:
             if not isinstance(entry, dict):
                 continue
             swf_path_str = entry.get("swf_path", "")
             if not swf_path_str:
                 continue
 
-            # 【パス結合エラーの根絶】相対パスを絶対パスに変換
-            swf_path = Path(swf_path_str)
-            if not swf_path.is_absolute():
-                swf_path = current_swf_dir / swf_path_str
-
             try:
-                swf_path = swf_path.resolve()
-            except Exception as e:
-                print(f"⚠️ パス変換エラー (skip): {swf_path_str} - {e}")
-                continue
+                swf_abs_path = self.controller.resolve_absolute_swf_path(swf_path_str)
+                swf_display_path = self.controller.to_relative_swf_path(swf_abs_path)
+            except Exception:
+                swf_display_path = Path(swf_path_str).name
 
-            # 現在のフォルダ配下か判定（Python 3.9+ is_relative_to）
-            try:
-                if not swf_path.is_relative_to(current_swf_dir):
-                    continue
-            except (ValueError, AttributeError) as e:
-                print(f"⚠️ is_relative_to エラー (skip): {swf_path} - {e}")
-                continue
-
-            swf_file_name = swf_path.name
-            if swf_file_name not in swf_to_fonts:
-                swf_to_fonts[swf_file_name] = []
+            if swf_display_path not in swf_to_fonts:
+                swf_to_fonts[swf_display_path] = {
+                    "fonts": [],
+                    "swf_path": swf_path_str,
+                }
 
             # 【データ構造の柔軟な吸収】font_names (リスト) と font_name (文字列) の両方に対応
             fonts = entry.get("font_names", [entry.get("font_name")])
@@ -544,91 +708,142 @@ class MainWindow(QMainWindow):
             fonts = [f for f in fonts if f]
 
             for font_name in fonts:
-                if font_name not in swf_to_fonts[swf_file_name]:
-                    swf_to_fonts[swf_file_name].append(font_name)
+                if font_name not in swf_to_fonts[swf_display_path]["fonts"]:
+                    swf_to_fonts[swf_display_path]["fonts"].append(font_name)
                 if font_name not in all_fonts:
                     all_fonts.append(font_name)
 
         # UI反映: 階層構造で表示
         self.list_widget_font_names.clear()
-        for swf_file_name in sorted(swf_to_fonts.keys()):
+        for swf_display_path in sorted(swf_to_fonts.keys()):
             # SWFファイル名を追加（選択不可）
-            swf_item = QListWidgetItem(f"● {swf_file_name}")
+            swf_item = QListWidgetItem(f"{SWF_FILE_LINE_PREFIX}{swf_display_path}")
             swf_item.setFlags(Qt.NoItemFlags)  # 選択不可
             self.list_widget_font_names.addItem(swf_item)
 
             # フォント名を追加（インデント表示）
-            for font_name in sorted(swf_to_fonts[swf_file_name]):
-                font_item = QListWidgetItem(f"　・{font_name}")
+            for font_name in sorted(swf_to_fonts[swf_display_path]["fonts"]):
+                font_item = QListWidgetItem(f"{FONT_NAME_LINE_PREFIX}{font_name}")
+                font_item.setData(
+                    Qt.UserRole,
+                    swf_to_fonts[swf_display_path]["swf_path"],
+                )
                 self.list_widget_font_names.addItem(font_item)
 
         # コンボボックスの更新には全フォント名のフラットリストを渡す
         self.update_combos_with_detected(sorted(all_fonts))
-        print(f"📊 UI更新完了: {len(swf_to_fonts)} ファイル, {len(all_fonts)} フォント")
+
+        # 検索フィルターを再適用
+        self.apply_font_list_filter(self.lineedit_font_search.text())
+
+    def on_font_search_text_changed(self, text: str):
+        """フォント名検索の入力変更時にリストを絞り込む"""
+        self.apply_font_list_filter(text)
+
+    def apply_font_list_filter(self, search_text: str):
+        """フォント名リストを検索文字列でフィルタする。"""
+        keyword = (search_text or "").strip().lower()
+
+        current_swf_item = None
+        current_swf_name = ""
+        current_swf_name_matches = False
+        current_swf_has_visible_font = False
+
+        for i in range(self.list_widget_font_names.count()):
+            item = self.list_widget_font_names.item(i)
+            item_text = item.text()
+
+            if item_text.startswith(SWF_FILE_LINE_PREFIX):
+                if current_swf_item is not None:
+                    if keyword:
+                        current_swf_item.setHidden(not current_swf_has_visible_font)
+                    else:
+                        current_swf_item.setHidden(False)
+
+                current_swf_item = item
+                current_swf_name = item_text[len(SWF_FILE_LINE_PREFIX) :].strip()
+                current_swf_name_matches = (not keyword) or (
+                    keyword in current_swf_name.lower()
+                )
+                current_swf_has_visible_font = False
+                item.setHidden(False)
+                continue
+
+            font_name = item_text
+            if item_text.startswith(FONT_NAME_LINE_PREFIX):
+                font_name = item_text[len(FONT_NAME_LINE_PREFIX) :].strip()
+
+            is_match = (
+                (not keyword)
+                or current_swf_name_matches
+                or (keyword in font_name.lower())
+            )
+            item.setHidden(not is_match)
+            if is_match:
+                current_swf_has_visible_font = True
+
+        if current_swf_item is not None:
+            if keyword:
+                current_swf_item.setHidden(not current_swf_has_visible_font)
+            else:
+                current_swf_item.setHidden(False)
 
     def on_font_selection_changed(self):
         """リストで選択されたフォントのプレビュー画像を表示する"""
         selected_item = self.list_widget_font_names.currentItem()
         if not selected_item:
+            self.current_preview_image_path = None
             self.preview_label.setText("No selection")
             self.preview_label.setPixmap(QPixmap())
+            self.preview_label.setCursor(Qt.ArrowCursor)
             return
 
         item_text = selected_item.text()
 
-        # SWFファイル名の行（● で始まる）が選択された場合は何もしない
-        if item_text.startswith("●"):
+        # SWFファイル名の行が選択された場合は何もしない
+        if item_text.startswith(SWF_FILE_LINE_PREFIX):
+            self.current_preview_image_path = None
             self.preview_label.setText("SWFファイルが選択されています")
             self.preview_label.setPixmap(QPixmap())
+            self.preview_label.setCursor(Qt.ArrowCursor)
             return
 
-        # フォント名から接頭辞（　・）を除去
-        font_name = item_text.lstrip("　・").strip()
+        # フォント名から接頭辞を除去
+        font_name = item_text
+        if item_text.startswith(FONT_NAME_LINE_PREFIX):
+            font_name = item_text[len(FONT_NAME_LINE_PREFIX) :].strip()
 
-        # 1. キャッシュからこのフォント名を持つ SWF パスを探す
-        found_swf_path = None
-        swf_dir = Path(self.settings.swf_dir) if self.settings.swf_dir else None
-        if not swf_dir:
-            self.preview_label.setText("SWF dir not set")
+        # 1. 選択項目のSWFパスを取得
+        swf_path_str = selected_item.data(Qt.UserRole)
+        if not swf_path_str:
+            self.current_preview_image_path = None
+            self.preview_label.setText(f"SWFファイルが見つかりません\n{font_name}")
+            self.preview_label.setCursor(Qt.ArrowCursor)
             return
 
-        swf_dir = swf_dir.resolve()
-
-        for entry in self.cache.data:
-            if not isinstance(entry, dict):
-                continue
-
-            # 【データ構造の柔軟な吸収】font_names (リスト) と font_name (文字列) の両方に対応
-            fonts = entry.get("font_names", [entry.get("font_name")])
-            if not isinstance(fonts, list):
-                fonts = [fonts] if fonts else []
-            fonts = [f for f in fonts if f]
-
-            if font_name in fonts:
-                # 【パス結合エラーの根絶】相対パスを絶対パスに変換
-                swf_path_str = entry.get("swf_path", "")
-                if not swf_path_str:
-                    continue
-
-                swf_path = Path(swf_path_str)
-                if not swf_path.is_absolute():
-                    swf_path = swf_dir / swf_path_str
-
-                try:
-                    found_swf_path = swf_path.resolve()
-                    break
-                except Exception as e:
-                    print(f"⚠️ SWFパス変換エラー: {swf_path_str} - {e}")
-                    continue
+        try:
+            found_swf_path = self.controller.resolve_absolute_swf_path(swf_path_str)
+        except Exception:
+            self.current_preview_image_path = None
+            self.preview_label.setText(f"SWFファイルが見つかりません\n{font_name}")
+            self.preview_label.setCursor(Qt.ArrowCursor)
+            return
 
         if not found_swf_path:
-            self.preview_label.setText(f"SWF not found\n{font_name}")
+            self.current_preview_image_path = None
+            self.preview_label.setText(f"SWFファイルが見つかりません\n{font_name}")
+            self.preview_label.setCursor(Qt.ArrowCursor)
             return
 
         # 2. プレビュー画像を探す
-        img_path = find_preview_image(found_swf_path)
+        img_path = find_preview_image(
+            found_swf_path,
+            font_name=font_name,
+            debug=self.debug,
+        )
 
         if img_path and img_path.exists():
+            self.current_preview_image_path = img_path
             pixmap = QPixmap(str(img_path))
             # ラベルのサイズに合わせてリサイズ（アスペクト比維持）
             scaled_pixmap = pixmap.scaled(
@@ -636,9 +851,22 @@ class MainWindow(QMainWindow):
             )
             self.preview_label.setPixmap(scaled_pixmap)
             self.preview_label.setText("")  # テキストを消す
+            self.preview_label.setCursor(Qt.PointingHandCursor)
         else:
+            self.current_preview_image_path = None
             self.preview_label.setPixmap(QPixmap())
             self.preview_label.setText(f"プレビュー画像が見つかりません\n{font_name}")
+            self.preview_label.setCursor(Qt.ArrowCursor)
+
+    def on_preview_label_clicked(self):
+        """プレビュー画像をクリックした時に、拡大表示ダイアログを開く。"""
+        if not self.current_preview_image_path:
+            return
+        if not self.current_preview_image_path.exists():
+            return
+
+        dialog = PreviewImageDialog(self.current_preview_image_path, self)
+        dialog.exec()
 
     def update_combos_with_detected(self, detected):
         """コンボボックスの中身を更新する"""
@@ -648,7 +876,7 @@ class MainWindow(QMainWindow):
 
             combo.blockSignals(True)
             combo.clear()
-            combo.addItem("-- 選択なし --", "")
+            combo.addItem(UNDEFINE_FONT_NAME, "")
 
             # 【ここがポイント！】
             # 「今回見つかったフォント」 ＋ 「現在設定されているフォント」
@@ -659,10 +887,10 @@ class MainWindow(QMainWindow):
 
             items = sorted(list(all_items))
             for f in items:
-                combo.addItem(f, f)
+                combo.addItem(self.format_mapping_font_label(f), f)
 
             # 値を再セット（これでスキャン前でも名前が消えない！）
-            idx = combo.findText(current_val)
+            idx = combo.findData(current_val if current_val else "")
             if idx >= 0:
                 combo.setCurrentIndex(idx)
 
@@ -714,6 +942,26 @@ class MainWindow(QMainWindow):
                 self, "完了", f"プリセット '{new_preset_name}' を作成しました。"
             )
 
+    def on_reload_preset_clicked(self):
+        """現在のプリセットファイルを再読み込みする"""
+        if self.preset_is_dirty:
+            reply = QMessageBox.question(
+                self,
+                "保存の確認",
+                "変更が保存されていません。再読み込み前に保存しますか？",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                self.on_save_current_preset_clicked()
+                if self.preset_is_dirty:
+                    return
+            elif reply == QMessageBox.Cancel:
+                return
+
+        self.preset.load()
+        self.refresh_ui_from_config()
+
     def on_preset_changed(self, preset_name):
         if not preset_name:
             return
@@ -754,19 +1002,58 @@ class MainWindow(QMainWindow):
     def on_mapping_changed(self, map_name, font_name):
         """設定値のメモリ上更新のみ行う"""
         # コンボボックスが空（リスト更新中など）の時は、メモリ上の設定を書き換えない
-        if font_name == "" or font_name is None:
+        if font_name is None:
             return
-        new_font = "" if font_name == "-- 選択なし --" else font_name
-        for m in self.preset.mappings:
-            if m["map_name"] == map_name:
-                # 値が本当に変わった時だけ Dirty フラグを立てる
-                if m["font_name"] != new_font:
-                    m["font_name"] = new_font
-                    self.preset_is_dirty = True
-                    # タイトルに * をつけて「未保存」を視覚化
-                    self.setWindowTitle(f"{MAIN_WINDOW_TITLE} *")
-                break
+        new_font = font_name
+        selected_swf_path = self._pending_mapping_swf_paths.pop(map_name, None)
+        if new_font and not selected_swf_path:
+            selected_swf_path = self.find_swf_path_for_font(new_font)
+
+        try:
+            changed = self.controller.update_mapping_from_ui(
+                map_name=map_name,
+                font_name=new_font,
+                selected_swf_path=selected_swf_path,
+                save=False,
+            )
+        except ValueError as e:
+            QMessageBox.warning(self, "入力エラー", str(e))
+            return
+
+        if changed:
+            self.preset_is_dirty = True
+            # タイトルに * をつけて「未保存」を視覚化
+            self.setWindowTitle(f"{MAIN_WINDOW_TITLE} *")
         # self.config.save() はここでは呼ばない！
+
+    def find_swf_path_for_font(self, font_name: str) -> str:
+        """現在のスキャン結果からフォント名に対応するSWFパスを返す"""
+        for entry in self.scanned_swf_entries:
+            if not isinstance(entry, dict):
+                continue
+            fonts = entry.get("font_names", [])
+            if not isinstance(fonts, list):
+                continue
+            if font_name in fonts:
+                return str(entry.get("swf_path", ""))
+        return ""
+
+    def format_mapping_font_label(self, font_name: str, swf_path: str = "") -> str:
+        """マッピング表示用ラベルを生成する（フォント名 + SWFファイル）。"""
+        if not font_name:
+            return ""
+
+        found_swf_path = swf_path or self.find_swf_path_for_font(font_name)
+        if not found_swf_path:
+            return font_name
+
+        try:
+            swf_abs = self.controller.resolve_absolute_swf_path(found_swf_path)
+            swf_display = self.controller.to_relative_swf_path(swf_abs)
+        except Exception:
+            swf_display = Path(found_swf_path).name
+
+        return f"{font_name} ({swf_display})"
 
     def setup_validnamechars_input(self, layout):
         """validNameChars入力レイアウトのセットアップ"""
@@ -810,16 +1097,19 @@ class MainWindow(QMainWindow):
         for i in range(self.list_widget_font_names.count()):
             item_text = self.list_widget_font_names.item(i).text()
             # SWFファイル名の行は除外
-            if not item_text.startswith("●"):
+            if not item_text.startswith(SWF_FILE_LINE_PREFIX):
                 # フォント名から接頭辞を除去
-                font_name = item_text.lstrip("　・").strip()
+                font_name = item_text.lstrip(FONT_NAME_LINE_PREFIX).strip()
                 available_fonts.add(font_name)
 
         not_found = self.controller.find_missing_fonts(available_fonts)
         if not_found:
-            print("\n⚠️ [WARNING] 設定されたフォントが現在のフォルダ内に見つかりません:")
+            dprint(
+                "\n設定されたフォントが現在のSWFフォルダ内に見つかりません:",
+                self.debug,
+            )
             for map_name, f in not_found:
-                print(f"  ・{map_name}: {f}")
+                dprint(f"  ・{map_name}: {f}", self.debug)
             warning_msg = (
                 "以下の設定済みフォントマップにて、紐づくフォントSWFが存在しません。\n"
                 "そのまま出力しますか？（UI全体が豆腐化する可能性があります）\n\n"
@@ -843,7 +1133,7 @@ class MainWindow(QMainWindow):
             initial_dir,
         )
         if not selected_dir:
-            print("出力がキャンセルされました。")
+            dprint("出力がキャンセルされました。", self.debug)
             return
 
         self.settings.output_dir = selected_dir
@@ -870,8 +1160,9 @@ class MainWindow(QMainWindow):
                 )
                 if core_swf.exists():
                     use_fallback = True
-                    print(
-                        "⚠️ フォント指定が空のため、fonts_core.swf を使用して補完します。"
+                    dprint(
+                        "⚠️ フォント指定が空のため、fonts_core.swf を使用して補完します。",
+                        self.debug,
                     )
                 else:
                     QMessageBox.critical(
@@ -882,7 +1173,7 @@ class MainWindow(QMainWindow):
                     return
 
             out_file = self.controller.generate_preset(Path(selected_dir), use_fallback)
-            print(f"✅ 生成成功: {out_file}")
+            dprint(f"✅ 生成成功: {out_file}", self.debug)
 
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("完了")
@@ -921,7 +1212,7 @@ class MainWindow(QMainWindow):
             self.preset_is_dirty = False
             # タイトルの * を消す
             self.setWindowTitle(MAIN_WINDOW_TITLE)
-            print("✅ ユーザープリセットを保存しました。")
+            dprint("✅ ユーザープリセットを保存しました。", self.debug)
         except Exception as e:
             QMessageBox.critical(self, "保存エラー", f"設定の保存に失敗しました:\n{e}")
 
@@ -961,7 +1252,7 @@ class MainWindow(QMainWindow):
         return True
 
 
-def run_app(app=None):
+def run_app(app: QApplication = None, debug: bool = False):
     """アプリケーションを起動するユーティリティ。
 
     `main.py` から起動処理を委譲するために、設定・プリセット・キャッシュの読み込み
@@ -977,6 +1268,38 @@ def run_app(app=None):
     # 1. システム設定を読み込み
     settings = Settings(Path(SETTINGS_FILE))
     settings.load()
+    if settings.migrated:
+        dprint(
+            "システム設定データのマイグレーションが完了しました。必要に応じて内容を確認して保存してください。",
+            debug,
+        )
+
+    # settings.yml に swf_dir がある場合、存在しなければ未設定に戻す
+    if settings.swf_dir:
+        swf_dir = Path(settings.swf_dir)
+        if not swf_dir.exists() or not swf_dir.is_dir():
+            dprint(
+                f"settings.yml の swf_dir が無効なため未設定に戻します: {swf_dir}",
+                debug,
+            )
+            settings.swf_dir = ""
+            settings.save()
+
+    # 1.5. 起動前にプリセット存在を保証（0件なら default.yml を作成）
+    try:
+        PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+        preset_files = list(PRESETS_DIR.glob("*.yml"))
+        if not preset_files:
+            default_preset_path = PRESETS_DIR / "default.yml"
+            Preset(default_preset_path).save()
+            settings.last_preset = default_preset_path.name
+            settings.save()
+            dprint(
+                f"プリセットが存在しなかったため、デフォルトプリセットを作成しました: {default_preset_path}",
+                debug,
+            )
+    except Exception as e:
+        print(f"デフォルトプリセットの初期化に失敗しました: {e}")
 
     # 手順1: Settings の健全化 — 欠けている設定をプリセットの生データから吸い上げる
     try:
@@ -1019,7 +1342,9 @@ def run_app(app=None):
                                 # 走査中の個別エラーは無視して次へ
                                 continue
                     if updated:
-                        print(f"settings に値を吸い上げました: {pfile}")
+                        dprint(
+                            f"システム設定をプリセットで補間しました: {pfile}", debug
+                        )
                         # もし十分な値が見つかれば早期終了して保存しても良い
                         # ただしここでは全ファイルを走査して可能な限り吸い上げる
                 except Exception as e:
@@ -1027,25 +1352,30 @@ def run_app(app=None):
         if updated:
             try:
                 settings.save()
-                print("Settings を更新して保存しました。")
+                dprint("システム設定を更新して保存しました。", debug)
             except Exception as e:
-                print(f"Settings の保存に失敗しました: {e}")
+                print(f"システム設定の保存に失敗しました: {e}")
     except Exception as e:
-        print(f"Settings 健全化中にエラーが発生しました: {e}")
+        print(f"システム設定の健全化中にエラーが発生しました: {e}")
 
     # 手順2: Presets の一括マイグレート（テンプレート補完等）
     try:
         if PRESETS_DIR.exists():
-            print("全プリセットをマイグレートします...")
+            # print("全プリセットをマイグレートします...")
             for pfile in PRESETS_DIR.glob("*.yml"):
+                pr = None
                 try:
-                    print(f"マイグレート中: {pfile}")
+                    # print(f"マイグレート中: {pfile}")
                     pr = Preset(pfile)
                     pr.load()
                     pr.save()
                 except Exception as e:
                     print(f"プリセットのマイグレートに失敗しました: {pfile}: {e}")
-            print("プリセットのマイグレートが完了しました。")
+                if pr and getattr(pr, "migrated", False):
+                    dprint(
+                        f"マイグレートが完了しました。必要に応じて内容を確認して保存してください。: {pfile}",
+                        debug,
+                    )
     except Exception as e:
         print(f"プリセット一括マイグレート中にエラーが発生しました: {e}")
 
@@ -1057,14 +1387,16 @@ def run_app(app=None):
     if candidate_path is not None and candidate_path.exists():
         preset_path = candidate_path
     else:
-        preset_path = Path(PRESETS_DIR) / "default.yml"
+        preset_path = DEFAULT_PRESET_FILE
 
     # 3. プリセットとキャッシュを読み込み
     preset = Preset(preset_path)
     cache = Cache(Path(CACHE_FILE))
 
     # 4. ウィンドウを生成して表示
-    window = MainWindow(settings=settings, preset=preset, cache=cache)
+    window = MainWindow(settings=settings, preset=preset, cache=cache, debug=debug)
+    if window.startup_aborted:
+        return 1
     window.show()
 
     return app.exec()

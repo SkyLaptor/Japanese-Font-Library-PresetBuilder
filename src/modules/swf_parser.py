@@ -77,7 +77,7 @@ def swf_parser(swf_path: Path, cache: list, debug: bool = False) -> list[str]:
 
             # 2. 更新日時が一致するか
             if entry.get("modified_date") == current_mtime:
-                dprint(f"キャッシュヒット!: {swf_path.name}", debug)
+                dprint(f"キャッシュを使用: {swf_path.name}", debug)
                 return entry["font_names"]
 
             # パスは合ってるけど日時が違う場合は、このentryは古いので無視して解析へ

@@ -96,56 +96,56 @@ mappings:
   category: mcm
   flag: option
 - map_name: $DragonFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: Dragon_script
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Dragon_script'
   weight: Normal
   category: special
   flag: require
 - map_name: $FalmerFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: Falmer
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Falmer'
   weight: Normal
   category: special
   flag: require
 - map_name: $DwemerFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: Dwemer
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Dwemer'
   weight: Normal
   category: special
   flag: require
 - map_name: $DaedricFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: Daedric
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Daedric'
   weight: Normal
   category: special
   flag: require
 - map_name: $MageScriptFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: Mage Script
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Mage Script'
   weight: Normal
   category: special
   flag: require
 - map_name: $SkyrimSymbolsFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: SkyrimSymbols
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'SkyrimSymbols'
   weight: Normal
   category: special
   flag: require
 - map_name: $SkyrimBooks_UnreadableFont
-  swf_path: 'data/fonts_core.swf'
-  font_name: SkyrimBooks_Unreadable
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'SkyrimBooks_Unreadable'
   weight: Normal
   category: special
   flag: require
 - map_name: ControllerButtons
-  swf_path: 'data/fonts_core.swf'
-  font_name: Controller  Buttons
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Controller  Buttons'
   weight: Normal
   category: special
   flag: require
 - map_name: ControllerButtonsInverted
-  swf_path: 'data/fonts_core.swf'
-  font_name: Controller  Buttons inverted
+  swf_path: 'system/fonts_core.swf'
+  font_name: 'Controller  Buttons inverted'
   weight: Normal
   category: special
   flag: require

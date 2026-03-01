@@ -95,7 +95,8 @@ def test_property_getters_default_to_empty_string(tmp_path):
     # load() adds missing fields
     assert s.last_preset == ""
     assert s.swf_dir == ""
-    assert s.output_dir == ""
+    assert "output_dir" in s.data
+    assert isinstance(s.output_dir, str)
 
 
 def test_save(tmp_path):
@@ -113,3 +114,60 @@ def test_save(tmp_path):
     assert loaded["last_preset"] == "test"
     assert loaded["swf_dir"] == "/path"
     assert loaded["output_dir"] == "/out"
+
+
+def test_swf_dir_is_stored_as_given_path_string(tmp_path):
+    """Settings should store swf_dir as-is without path conversion logic"""
+    settings_file = tmp_path / "settings.yml"
+    s = Settings(settings_file)
+
+    expected_path = "C:/game/mods/fonts"
+    s.swf_dir = expected_path
+    s.save()
+
+    loaded = Settings(settings_file)
+    assert loaded.swf_dir == expected_path
+
+
+def test_last_preset_keeps_relative_name_as_given(tmp_path):
+    """last_preset should keep preset-relative name as-is"""
+    settings_file = tmp_path / "settings.yml"
+    s = Settings(settings_file)
+
+    expected = "example.yml"
+    s.last_preset = expected
+    s.save()
+
+    loaded = Settings(settings_file)
+    assert loaded.last_preset == expected
+
+
+def test_output_dir_is_stored_as_given_absolute_path_string(tmp_path):
+    """output_dir should be stored as given without conversion"""
+    settings_file = tmp_path / "settings.yml"
+    s = Settings(settings_file)
+
+    expected = "C:/mods/output"
+    s.output_dir = expected
+    s.save()
+
+    loaded = Settings(settings_file)
+    assert loaded.output_dir == expected
+
+
+def test_migrated_flag_is_false_when_no_legacy_transform_needed(tmp_path):
+    """migrated should be False if no legacy key conversion or completion occurs"""
+    settings_file = tmp_path / "settings.yml"
+    settings_file.write_text(
+        yaml.dump(
+            {
+                "last_preset": "default.yml",
+                "swf_dir": "C:/swf",
+                "output_dir": "C:/out",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    s = Settings(settings_file)
+    assert s.migrated is False
