@@ -73,7 +73,7 @@ SWFファイル自体を編集することなく、特定のルールに従っ�
 本ツールは多言語対応しており、UIの表示言語を切り替えることが可能です。
 The tool supports multiple languages, and you can switch the UI display language.
 
-### 1. コマンドラインからの指定 (Command Line)
+### Step1. コマンドラインからの指定 (Command Line)
 起動時に引数を指定することで言語を変更できます。一度この方法で起動すると、設定が保存され次回以降も維持されます。  
 You can specify the language using a command-line argument. Once launched this way, the setting will be saved for future sessions.
 
@@ -81,3 +81,15 @@ You can specify the language using a command-line argument. Once launched this w
 # 英語に設定して起動する場合 (To launch in English)
 ./run.cmd --lang en-us
 ```
+
+### Step2. 設定ファイルからの変更 (Manual Configuration)
+settings.yml を直接編集することでも変更可能です。  
+You can also change it by manually editing settings.yml.
+
+```yaml:settings.yml
+lang: en-us
+```
+
+> [!NOTE]
+> 翻訳へのご協力のお願い / Contributing Translations > 新たな言語の翻訳ファイルを作成いただける場合は、data/lang/<lang_code>.yml として配置してください。皆様の献身的な協力を心よりお待ちしております！  
+> If you would like to provide a new translation, please place the file at data/lang/<lang_code>.yml. We welcome your contributions!
