@@ -67,3 +67,17 @@ SWFファイル自体を編集することなく、特定のルールに従っ�
 ### 活用イメージ
 - **配布されているフォント**: MOD紹介に貼られている画像をSWFと同じフォルダに `sample.jpg` としておいておけばいちいちMODページを確認せずに確認できます。
 - **自作の確認用**: ゲーム内でのスクリーンショットを「SWF名.png」として保存しておけば、ツール上でいつでもフォントの雰囲気を再確認できます。
+
+## 言語の変更方法 / How to Change Language
+
+本ツールは多言語対応しており、UIの表示言語を切り替えることが可能です。
+The tool supports multiple languages, and you can switch the UI display language.
+
+### 1. コマンドラインからの指定 (Command Line)
+起動時に引数を指定することで言語を変更できます。一度この方法で起動すると、設定が保存され次回以降も維持されます。  
+You can specify the language using a command-line argument. Once launched this way, the setting will be saved for future sessions.
+
+```powershell:
+# 英語に設定して起動する場合 (To launch in English)
+./run.cmd --lang en-us
+```
